@@ -1,0 +1,40 @@
+server:
+  port: 8080
+  servlet:
+    context-path: /api
+
+spring:
+  application:
+    name: training-system
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://${TRAIN_DB_HOST:localhost}:${TRAIN_DB_PORT:3306}/training_db?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+    username: ${TRAIN_DB_USER:root}
+    # 本机 ~/.tools/mysql 实例 root 为空密码; 生产请用环境变量注入
+    password: ${TRAIN_DB_PASSWORD:}
+  jackson:
+    date-format: yyyy-MM-dd HH:mm:ss
+    time-zone: GMT+8
+    default-property-inclusion: non_null
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+  global-config:
+    banner: false
+    db-config:
+      id-type: auto
+      logic-delete-field: delFlag
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+
+# 培训系统自定义配置
+train:
+  jwt:
+    # 生产环境必须通过环境变量 TRAIN_JWT_SECRET 注入随机长密钥并定期轮换
+    secret: ${TRAIN_JWT_SECRET:SoeTrainingSystemJwtSecret-2026-ChangeMe-In-Production!!-0123456789}
+    expire-hours: 24
+
+logging:
+  level:
+    com.soe.training: debug
