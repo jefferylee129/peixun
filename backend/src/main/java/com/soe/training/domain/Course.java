@@ -36,4 +36,12 @@ public class Course extends BaseEntity {
     private Long auditUserId;
     private LocalDateTime auditTime;
     private String auditRemark;
+    /** 0 自建 1 外部同步 */
+    private Integer sourceType;
+    /** 来源外部系统ID */
+    private Long sourceId;
+    /** 外部课程唯一编码 */
+    private String externalCode;
+    /** 外部学习链接 */
+    private String externalUrl;
 }

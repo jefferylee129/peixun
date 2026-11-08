@@ -21,6 +21,7 @@ const routes = [
       { path: 'trainer', component: () => import('@/views/trainer/index.vue'), meta: { title: '培训师资' } },
       { path: 'classes', component: () => import('@/views/class/index.vue'), meta: { title: '培训班次' } },
       { path: 'classes/:id', component: () => import('@/views/class/detail.vue'), meta: { title: '班次详情' } },
+      { path: 'integration', component: () => import('@/views/integration/index.vue'), meta: { title: '外部课程同步' } },
       { path: 'hours', component: () => import('@/views/hours/index.vue'), meta: { title: '学时台账' } },
       { path: 'hours-stats', component: () => import('@/views/hours/stats.vue'), meta: { title: '达标统计' } },
       { path: 'eval-template', component: () => import('@/views/eval/template.vue'), meta: { title: '评估模板' } },

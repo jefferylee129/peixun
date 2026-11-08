@@ -46,6 +46,7 @@ INSERT INTO sys_menu (id, parent_id, menu_name, path, component, menu_type, perm
 (104, 100, '培训课程', 'course',         'course/index',    'C', 'biz:course:list',  'Reading',       4),
 (105, 100, '培训师资', 'trainer',        'trainer/index',   'C', 'biz:trainer:list', 'Avatar',        5),
 (106, 100, '培训班次', 'classes',        'class/index',     'C', 'biz:class:list',   'School',        6),
+(107, 100, '外部课程同步', 'integration', 'integration/index', 'C', 'biz:integration:list', 'Connection', 7),
 (200, 0,   '学时与评估','hours-eval',    '',                'M', '',                 'DataAnalysis',  3),
 (201, 200, '学时台账', 'hours',          'hours/index',     'C', 'biz:hours:list',   'List',          1),
 (202, 200, '达标统计', 'hours-stats',    'hours/stats',     'C', 'biz:hours:list',   'TrendCharts',   2),
@@ -79,6 +80,8 @@ INSERT INTO sys_menu (id, parent_id, menu_name, path, component, menu_type, perm
 (1141, 106, '班次编辑', '', '', 'F', 'biz:class:edit',   '', 2),
 (1142, 106, '班次删除', '', '', 'F', 'biz:class:remove', '', 3),
 (1143, 106, '班次签到', '', '', 'F', 'biz:class:sign',   '', 4),
+(1144, 107, '接入配置维护', '', '', 'F', 'biz:integration:edit', '', 1),
+(1145, 107, '同步与入库', '', '', 'F', 'biz:integration:sync', '', 2),
 (1150, 201, '学时补录', '', '', 'F', 'biz:hours:add',    '', 1),
 (1151, 201, '学时认定', '', '', 'F', 'biz:hours:audit',  '', 2),
 (1152, 201, '学时删除', '', '', 'F', 'biz:hours:remove', '', 3),
@@ -106,6 +109,7 @@ INSERT INTO sys_role_menu (role_id, menu_id) VALUES
 (2, 200),(2, 201),(2, 202),(2, 203),(2, 204),(2, 300),(2, 500),(2, 501),(2, 502),
 (2, 1101),(2, 1110),(2, 1111),(2, 1112),(2, 1113),(2, 1120),(2, 1121),(2, 1122),(2, 1123),
 (2, 1130),(2, 1131),(2, 1132),(2, 1140),(2, 1141),(2, 1142),(2, 1143),
+(2, 107),(2, 1144),(2, 1145),
 (2, 1150),(2, 1151),(2, 1152),(2, 1160),
 (3, 1),(3, 102),(3, 500),(3, 501),(3, 502);
 
