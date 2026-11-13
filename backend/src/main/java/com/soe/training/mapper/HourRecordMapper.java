@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.soe.training.domain.HourRecord;
 import com.soe.training.domain.vo.HourRecordVo;
+import org.apache.ibatis.annotations.Delete;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
 
@@ -15,6 +16,14 @@ public interface HourRecordMapper extends BaseMapper<HourRecord> {
     @Select("SELECT IFNULL(SUM(hours), 0) FROM biz_hour_record " +
             "WHERE del_flag = 0 AND status = '1' AND user_id = #{userId} AND year = #{year}")
     BigDecimal sumUserHours(@Param("userId") Long userId, @Param("year") Integer year);
+
+    /**
+     * 物理删除签到自动生成的学时(可由签到记录重建的派生数据)。
+     * 不能走 @TableLogic 软删: uk_hour_schedule_user 唯一键会与软删行冲突,
+     * 导致补签/结班第二次重算插入时报 Duplicate entry。
+     */
+    @Delete("DELETE FROM biz_hour_record WHERE class_id = #{classId} AND source = 1")
+    int deleteSignRecords(@Param("classId") Long classId);
 
     @Select("<script>" +
             "SELECT r.*, u.nickname AS userName, u.employee_no AS employeeNo, d.dept_name AS deptName, " +
@@ -30,7 +39,7 @@ public interface HourRecordMapper extends BaseMapper<HourRecord> {
             "<if test='deptId != null'> AND u.dept_id = #{deptId}</if>" +
             "<if test='source != null'> AND r.source = #{source}</if>" +
             "<if test=\"status != null and status != ''\"> AND r.status = #{status}</if>" +
-            "<if test=\"keyword != null and keyword != ''\"> AND (u.nickname LIKE CONCAT('%', #{keyword}, '%') OR u.employee_no LIKE CONCAT('%', #{keyword}, '%'))</if>" +
+            "<if test=\"keyword != null and keyword != ''\"> AND (u.nickname LIKE CONCAT('%', #{keyword}, '%') OR u.employee_no LIKE CONCAT('%', #{keyword}, '%') OR r.remark LIKE CONCAT('%', #{keyword}, '%'))</if>" +
             " ORDER BY r.record_date DESC, r.id DESC" +
             "</script>")
     IPage<HourRecordVo> selectPageVo(Page<HourRecordVo> page, @Param("year") Integer year,

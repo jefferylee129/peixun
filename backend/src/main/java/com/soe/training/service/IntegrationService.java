@@ -110,6 +110,12 @@ public class IntegrationService {
 
     @Transactional
     public void changeStatus(Long id, String status) {
+        if (sourceMapper.selectById(id) == null) {
+            throw new BusinessException("数据源不存在");
+        }
+        if (!"0".equals(status) && !"1".equals(status)) {
+            throw new BusinessException("状态仅允许 0启用 / 1停用");
+        }
         CourseSource u = new CourseSource();
         u.setId(id);
         u.setStatus(status);
@@ -279,6 +285,9 @@ public class IntegrationService {
     public int ignore(List<Long> ids) {
         int n = 0;
         for (Long id : ids) {
+            if (externalCourseMapper.selectById(id) == null) {
+                throw new BusinessException("暂存课程不存在: " + id);
+            }
             ExternalCourse u = new ExternalCourse();
             u.setId(id);
             u.setStatus("2");

@@ -26,6 +26,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -102,6 +103,7 @@ public class ClassService {
 
     @Transactional
     public void save(TrainingClass c) {
+        checkDateRange(c.getStartDate(), c.getEndDate());
         if (c.getId() == null) {
             c.setStatus("0");
             classMapper.insert(c);
@@ -109,6 +111,13 @@ public class ClassService {
             TrainingClass old = getOrThrow(c.getId());
             if ("2".equals(old.getStatus()) || "3".equals(old.getStatus())) {
                 throw new BusinessException("进行中或已结束的班次不可编辑");
+            }
+            if (c.getCapacity() != null) {
+                Long cnt = studentMapper.selectCount(new LambdaQueryWrapper<ClassStudent>()
+                        .eq(ClassStudent::getClassId, c.getId()));
+                if (cnt > c.getCapacity()) {
+                    throw new BusinessException("计划人数不能少于当前已报名人数(" + cnt + ")");
+                }
             }
             c.setStatus(null);
             classMapper.updateById(c);
@@ -124,14 +133,15 @@ public class ClassService {
         classMapper.deleteById(id);
     }
 
-    /** 状态流转: 0筹备中 → 1报名中 → 2进行中 → 3已结束; 0/1 可取消 */
+    /** 状态流转: 0筹备中 → 1报名中 → 2进行中 → 3已结束; 0/1 可取消; 0 可直接开始 */
     @Transactional
     public void changeStatus(Long id, String status) {
         TrainingClass c = getOrThrow(id);
         String cur = c.getStatus();
         boolean ok = switch (status) {
             case "1" -> "0".equals(cur);
-            case "2" -> "1".equals(cur);
+            // 内派/指令性班次可从筹备中直接开始, 跳过公开报名
+            case "2" -> "1".equals(cur) || "0".equals(cur);
             case "3" -> "2".equals(cur);
             case "4" -> "0".equals(cur) || "1".equals(cur);
             default -> false;
@@ -143,8 +153,18 @@ public class ClassService {
         u.setId(id);
         u.setStatus(status);
         classMapper.updateById(u);
-        // 结班时, 从未参训(无学时)的报名学员标记为缺勤
+        // 结班时: 先自动结束未上课节 → 重算签到学时 → 再把无学时的报名学员标缺勤
+        // 顺序不能反, 否则已签到但学时还未生成的学员会被误标缺勤; 已取消(status=2)的课节不动
         if ("3".equals(status)) {
+            for (ClassSchedule s : scheduleMapper.selectList(new LambdaQueryWrapper<ClassSchedule>()
+                    .eq(ClassSchedule::getClassId, id)
+                    .eq(ClassSchedule::getStatus, "0"))) {
+                ClassSchedule su = new ClassSchedule();
+                su.setId(s.getId());
+                su.setStatus("1");
+                scheduleMapper.updateById(su);
+            }
+            recomputeClassHours(id);
             for (StudentVo st : studentMapper.selectByClassId(id)) {
                 if ("0".equals(st.getStatus())
                         && (st.getTotalHours() == null
@@ -162,7 +182,10 @@ public class ClassService {
 
     @Transactional
     public void addStudents(Long classId, List<Long> userIds) {
-        TrainingClass c = getOrThrow(classId);
+        TrainingClass c = classMapper.lockById(classId);
+        if (c == null || Integer.valueOf(1).equals(c.getDelFlag())) {
+            throw new BusinessException("培训班次不存在");
+        }
         if ("3".equals(c.getStatus()) || "4".equals(c.getStatus())) {
             throw new BusinessException("班次已结束或已取消, 不能调整学员");
         }
@@ -214,7 +237,10 @@ public class ClassService {
     @Transactional
     public void selfEnroll(Long classId) {
         Long userId = AuthContext.getUserId();
-        TrainingClass c = getOrThrow(classId);
+        TrainingClass c = classMapper.lockById(classId);
+        if (c == null || Integer.valueOf(1).equals(c.getDelFlag())) {
+            throw new BusinessException("培训班次不存在");
+        }
         if (!"1".equals(c.getStatus())) {
             throw new BusinessException("班次不在报名中状态");
         }
@@ -317,9 +343,8 @@ public class ClassService {
     @Transactional
     public void recomputeClassHours(Long classId) {
         BigDecimal lateFactor = new BigDecimal(configService.getValue("hour.factor.late", "0.5"));
-        hourRecordMapper.delete(new LambdaQueryWrapper<HourRecord>()
-                .eq(HourRecord::getClassId, classId)
-                .eq(HourRecord::getSource, 1));
+        // 派生数据物理删除, 避免软删行占用 uk_hour_schedule_user 唯一键
+        hourRecordMapper.deleteSignRecords(classId);
 
         List<ScheduleVo> finished = new ArrayList<>();
         for (ScheduleVo s : scheduleMapper.selectByClassId(classId)) {
@@ -372,6 +397,9 @@ public class ClassService {
             u.setTotalHours(total);
             if (attendedUsers.contains(st.getUserId())) {
                 u.setStatus("2");
+            } else if ("2".equals(st.getStatus())) {
+                // 补签/重算后未再参训的学员回退为已报名; 缺勤(3)不回退
+                u.setStatus("0");
             }
             studentMapper.updateById(u);
         }
@@ -389,24 +417,25 @@ public class ClassService {
         if (s == null) {
             throw new BusinessException("课节不存在");
         }
-        if ("1".equals(s.getStatus())) {
-            throw new BusinessException("课节已结束, 不能签到");
-        }
         if ("2".equals(s.getStatus())) {
             throw new BusinessException("已取消的课节不能签到");
         }
+        // 仅进行中班次可签到(含对已结束课节的补签); 筹备/报名/结束/取消均不可
         TrainingClass c = classMapper.selectById(s.getClassId());
-        if (c == null || "3".equals(c.getStatus()) || "4".equals(c.getStatus())) {
-            throw new BusinessException("班次已结束或已取消, 不能签到");
+        if (c == null || !"2".equals(c.getStatus())) {
+            throw new BusinessException("班次未在进行中, 不能签到");
         }
         if (!"normal".equals(signType) && !"late".equals(signType)
                 && !"leave".equals(signType) && !"absent".equals(signType)) {
             throw new BusinessException("无效的签到类型");
         }
         if (studentMapper.selectOne(s.getClassId(), userId) == null) {
-            // 签到自动入班同样受人数上限约束, 防止绕过报名限制
-            TrainingClass cls = classMapper.selectById(s.getClassId());
-            if (cls != null && cls.getCapacity() != null) {
+            // 签到自动入班同样受人数上限约束, 防止绕过报名限制; 行锁防并发超卖
+            TrainingClass cls = classMapper.lockById(s.getClassId());
+            if (cls == null || Integer.valueOf(1).equals(cls.getDelFlag())) {
+                throw new BusinessException("培训班次不存在");
+            }
+            if (cls.getCapacity() != null) {
                 Long cnt = studentMapper.selectCount(new LambdaQueryWrapper<ClassStudent>()
                         .eq(ClassStudent::getClassId, s.getClassId()));
                 if (cnt >= cls.getCapacity()) {
@@ -449,6 +478,10 @@ public class ClassService {
             a.setSignTime(LocalDateTime.now());
             attendanceMapper.updateById(a);
         }
+        // 对已结束课节补签后立即重算学时, 保证台账及时反映补签结果
+        if ("1".equals(s.getStatus())) {
+            recomputeClassHours(s.getClassId());
+        }
     }
 
     private TrainingClass getOrThrow(Long id) {
@@ -457,5 +490,11 @@ public class ClassService {
             throw new BusinessException("培训班次不存在");
         }
         return c;
+    }
+
+    private void checkDateRange(LocalDate start, LocalDate end) {
+        if (start != null && end != null && start.isAfter(end)) {
+            throw new BusinessException("开始日期不能晚于结束日期");
+        }
     }
 }

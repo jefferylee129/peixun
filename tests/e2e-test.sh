@@ -137,10 +137,14 @@ req GET "/biz/classes/$CLID/students" "$TA"
 assert "5.11 正常签到学时=3" "d['data'][0]['totalHours']" 3.0
 assert "5.12 迟到学时=1.5(系数0.5)" "d['data'][1]['totalHours']" 1.5
 req POST "/biz/classes/schedules/$SID/attendance" "$TA" '{"userId":5,"signType":"normal"}'
-assert "5.13 课节结束后禁止补签(修复项)" "d['code']" 400
+assert "5.13 课节结束后班次进行中允许补签(修复项)" "d['code']" 200
+req GET "/biz/classes/$CLID/students" "$TA"
+assert "5.13a 补签学员即时获得学时" "[s['totalHours'] for s in d['data'] if s['userId']==5][0]" 3.0
+# 原未参训学员已被补签, 追加一名从未签到的学员用于缺勤断言
+req POST "/biz/classes/$CLID/students" "$TA" '{"userIds":[6]}' ; assert "5.13b 追加未参训学员" "d['code']" 200
 req PUT "/biz/classes/$CLID/status?status=3" "$ADMIN" ; assert "5.14 结班" "d['code']" 200
 req GET "/biz/classes/$CLID/students" "$TA"
-assert "5.15 未参训学员标记缺勤(修复项)" "d['data'][2]['status']" 3
+assert "5.15 未参训学员标记缺勤(修复项)" "[s['status'] for s in d['data'] if s['userId']==6][0]" 3
 
 # ============ 6. 学时台账 ============
 section "6. 学时台账与认定"

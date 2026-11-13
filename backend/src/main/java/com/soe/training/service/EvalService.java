@@ -116,6 +116,10 @@ public class EvalService {
         if (t == null || !"0".equals(t.getStatus())) {
             throw new BusinessException("评估模板不存在或已停用");
         }
+        // 与 pending() 口径一致: 仅启用的一级(反应层)问卷可用于班次评估
+        if (t.getEvalLevel() == null || t.getEvalLevel() != 1) {
+            throw new BusinessException("仅一级(反应层)评估问卷可用于班次评估");
+        }
         TrainingClass c = classMapper.selectById(classId);
         if (c == null) {
             throw new BusinessException("班次不存在");
@@ -196,7 +200,8 @@ public class EvalService {
         Map<String, List<BigDecimal>> scoreMap = new HashMap<>();
         List<Map<String, String>> textAnswers = new ArrayList<>();
         List<Map<String, String>> comments = new ArrayList<>();
-        BigDecimal totalSum = BigDecimal.ZERO;
+        BigDecimal scoreSum = BigDecimal.ZERO;
+        int scoreCnt = 0;
 
         for (EvalRecordVo r : records) {
             Map<String, Object> scores = parseMap(r.getScores());
@@ -209,8 +214,10 @@ public class EvalService {
                 }
                 if ("score".equals(type)) {
                     try {
-                        scoreMap.computeIfAbsent(key, k -> new ArrayList<>())
-                                .add(new BigDecimal(v.toString()));
+                        BigDecimal val = new BigDecimal(v.toString());
+                        scoreMap.computeIfAbsent(key, k -> new ArrayList<>()).add(val);
+                        scoreSum = scoreSum.add(val);
+                        scoreCnt++;
                     } catch (NumberFormatException ignored) {
                     }
                 } else if (!v.toString().isBlank()) {
@@ -227,9 +234,6 @@ public class EvalService {
                 cm.put("comment", r.getComment());
                 comments.add(cm);
             }
-            if (r.getTotalScore() != null) {
-                totalSum = totalSum.add(r.getTotalScore());
-            }
         }
 
         EvalSummaryVo vo = new EvalSummaryVo();
@@ -245,8 +249,8 @@ public class EvalService {
             }
         }
         vo.setItemAvg(itemAvg);
-        vo.setOverallAvg(records.isEmpty() ? BigDecimal.ZERO
-                : totalSum.divide(new BigDecimal(records.size()), 1, RoundingMode.HALF_UP));
+        vo.setOverallAvg(scoreCnt == 0 ? BigDecimal.ZERO
+                : scoreSum.divide(new BigDecimal(scoreCnt), 1, RoundingMode.HALF_UP));
         vo.setEvalCount(records.size());
         vo.setTextAnswers(textAnswers);
         vo.setComments(comments);

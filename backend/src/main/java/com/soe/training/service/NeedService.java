@@ -170,6 +170,9 @@ public class NeedService {
         if (c == null) {
             throw new BusinessException("征集任务不存在");
         }
+        if ("1".equals(c.getStatus())) {
+            throw new BusinessException("征集任务已结束, 不能重复关闭");
+        }
         NeedCollection u = new NeedCollection();
         u.setId(id);
         u.setStatus("1");
@@ -177,6 +180,16 @@ public class NeedService {
     }
 
     public void deleteCollection(Long id) {
+        NeedCollection c = collectionMapper.selectById(id);
+        if (c == null) {
+            throw new BusinessException("征集任务不存在");
+        }
+        // 已有需求申报挂在该征集下时不允许删, 避免申报记录悬空
+        Long refs = needMapper.selectCount(new LambdaQueryWrapper<TrainingNeed>()
+                .eq(TrainingNeed::getCollectionId, id));
+        if (refs > 0) {
+            throw new BusinessException("该征集任务下已有需求申报, 不能删除");
+        }
         collectionMapper.deleteById(id);
     }
 }

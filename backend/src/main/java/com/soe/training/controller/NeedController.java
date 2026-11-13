@@ -79,7 +79,7 @@ public class NeedController {
     @RequirePerm("biz:need:audit")
     @PutMapping("/{id}/audit")
     public Result<Void> audit(@PathVariable Long id, @RequestBody Map<String, Object> body) {
-        boolean adopt = Boolean.TRUE.equals(body.get("adopt"));
+        boolean adopt = Boolean.TRUE.equals(body.get("adopt")) || Boolean.TRUE.equals(body.get("pass"));
         String remark = body.get("remark") == null ? null : body.get("remark").toString();
         needService.audit(id, adopt, remark);
         return Result.ok();

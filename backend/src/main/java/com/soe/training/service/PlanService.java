@@ -34,6 +34,10 @@ public class PlanService {
 
     @Transactional
     public void save(TrainingPlan plan) {
+        if (plan.getStartDate() != null && plan.getEndDate() != null
+                && plan.getStartDate().isAfter(plan.getEndDate())) {
+            throw new BusinessException("开始日期不能晚于结束日期");
+        }
         if (plan.getYear() == null) {
             plan.setYear(LocalDate.now().getYear());
         }

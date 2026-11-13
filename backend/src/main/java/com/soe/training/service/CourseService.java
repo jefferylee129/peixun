@@ -47,6 +47,10 @@ public class CourseService {
             course.setAuditUserId(null);
             course.setAuditTime(null);
             course.setAuditRemark(null);
+            // 外部同步课程的来源标识不可被编辑覆盖, 保证幂等入库键稳定
+            course.setSourceType(old.getSourceType());
+            course.setSourceId(old.getSourceId());
+            course.setExternalCode(old.getExternalCode());
             courseMapper.updateById(course);
         }
     }

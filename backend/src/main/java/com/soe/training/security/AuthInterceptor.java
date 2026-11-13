@@ -2,6 +2,7 @@ package com.soe.training.security;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.soe.training.common.Result;
+import com.soe.training.domain.SysUser;
 import com.soe.training.mapper.UserMapper;
 import io.jsonwebtoken.Claims;
 import jakarta.servlet.http.HttpServletRequest;
@@ -42,6 +43,12 @@ public class AuthInterceptor implements HandlerInterceptor {
             return false;
         }
         Long userId = claims.get("uid", Long.class);
+        // 停用/删除用户的旧 token 立即失效: 每请求校验账号状态(selectById 已过滤逻辑删除)
+        SysUser user = userMapper.selectById(userId);
+        if (user == null || !"0".equals(user.getStatus())) {
+            write(response, 401, 401, "账号不存在, 已删除或已停用");
+            return false;
+        }
 
         List<Map<String, Object>> roleRows = userMapper.selectRoles(userId);
         Set<String> roles = new HashSet<>();

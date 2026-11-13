@@ -10,6 +10,9 @@ import org.apache.ibatis.annotations.Select;
 
 public interface ClassMapper extends BaseMapper<TrainingClass> {
 
+    @Select("SELECT * FROM biz_class WHERE id = #{id} FOR UPDATE")
+    TrainingClass lockById(@Param("id") Long id);
+
     @Select("<script>" +
             "SELECT c.*, d.dept_name AS deptName, p.plan_name AS planName, " +
             "(SELECT COUNT(*) FROM biz_class_student s WHERE s.class_id = c.id AND s.del_flag = 0) AS studentCount " +

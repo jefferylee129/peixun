@@ -8,8 +8,14 @@ import com.soe.training.common.PageResult;
 import com.soe.training.domain.SysDept;
 import com.soe.training.domain.SysUser;
 import com.soe.training.domain.dto.UserSaveDto;
+import com.soe.training.domain.ClassStudent;
+import com.soe.training.domain.HourRecord;
+import com.soe.training.domain.TrainingNeed;
 import com.soe.training.mapper.DeptMapper;
 import com.soe.training.mapper.UserMapper;
+import com.soe.training.mapper.HourRecordMapper;
+import com.soe.training.mapper.ClassStudentMapper;
+import com.soe.training.mapper.NeedMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -32,6 +38,9 @@ public class UserService {
     private final UserMapper userMapper;
     private final DeptMapper deptMapper;
     private final BCryptPasswordEncoder passwordEncoder;
+    private final HourRecordMapper hourRecordMapper;
+    private final ClassStudentMapper classStudentMapper;
+    private final NeedMapper needMapper;
 
     public PageResult<Map<String, Object>> page(int page, int size, String keyword,
                                                 Long deptId, String status) {
@@ -141,6 +150,22 @@ public class UserService {
         if (id == 1L) {
             throw new BusinessException("内置管理员不允许删除");
         }
+        if (userMapper.selectById(id) == null) {
+            throw new BusinessException("用户不存在");
+        }
+        // 有关联业务数据的用户不删, 避免台账/报名/需求悬空
+        if (hourRecordMapper.selectCount(new LambdaQueryWrapper<HourRecord>()
+                .eq(HourRecord::getUserId, id)) > 0) {
+            throw new BusinessException("该用户存在学时台账记录, 不能删除");
+        }
+        if (classStudentMapper.selectCount(new LambdaQueryWrapper<ClassStudent>()
+                .eq(ClassStudent::getUserId, id)) > 0) {
+            throw new BusinessException("该用户存在班次报名记录, 不能删除");
+        }
+        if (needMapper.selectCount(new LambdaQueryWrapper<TrainingNeed>()
+                .eq(TrainingNeed::getUserId, id)) > 0) {
+            throw new BusinessException("该用户存在培训需求记录, 不能删除");
+        }
         userMapper.deleteById(id);
         userMapper.deleteUserRole(id);
     }
@@ -159,8 +184,14 @@ public class UserService {
     }
 
     public void changeStatus(Long id, String status) {
+        if (!"0".equals(status) && !"1".equals(status)) {
+            throw new BusinessException("状态仅允许 0启用 / 1停用");
+        }
         if (id == 1L && "1".equals(status)) {
             throw new BusinessException("内置管理员不允许停用");
+        }
+        if (userMapper.selectById(id) == null) {
+            throw new BusinessException("用户不存在");
         }
         SysUser update = new SysUser();
         update.setId(id);
