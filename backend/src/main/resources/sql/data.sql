@@ -248,3 +248,28 @@ INSERT INTO biz_eval_record (template_id, class_id, user_id, scores, total_score
 (1, 1, 3, '{"q1":5,"q2":4,"q3":4,"q4":5,"t1":"希望增加实操演练时间"}', 18.0, '组织有序, 收获很大。', '2026-03-12 09:00:00'),
 (1, 1, 4, '{"q1":4,"q2":4,"q3":5,"q4":4}', 17.0, NULL, '2026-03-12 09:05:00'),
 (1, 1, 6, '{"q1":4,"q2":5,"q3":4,"q4":4,"t1":"建议增加事故案例分析"}', 17.0, '建议缩短理论课时。', '2026-03-12 09:10:00');
+
+-- 八、行业对标优化菜单(档案/消息/证书/考试) ---------------------------------
+INSERT INTO sys_menu (id, parent_id, menu_name, path, component, menu_type, perms, icon, order_num) VALUES
+(600, 100, '培训档案',   'archive',     'archive/index',   'C', 'biz:archive:other', 'FolderOpened', 8),
+(601, 100, '题库管理',   'question',    'exam/question',   'C', 'biz:question:list', 'Collection',   9),
+(602, 100, '考试管理',   'exam',        'exam/index',      'C', 'biz:exam:list',     'Finished',    10),
+(603, 200, '证书台账',   'certificates','cert/index',      'C', 'biz:cert:list',     'Medal',        5),
+(604, 500, '我的档案',   'my-archive',  'archive/my',      'C', '',                 'FolderChecked',3),
+(605, 500, '消息中心',   'messages',    'message/index',   'C', '',                 'Bell',         4),
+(606, 500, '在线考试',   'my-exam',     'exam/my',         'C', '',                 'EditPen',      5),
+(1300, 600, '查看他人档案', '', '', 'F', 'biz:archive:other', '', 1),
+(1310, 601, '题目维护', '', '', 'F', 'biz:question:edit', '', 1),
+(1320, 602, '考试维护', '', '', 'F', 'biz:exam:edit',     '', 1),
+(1321, 602, '考试发布', '', '', 'F', 'biz:exam:publish',  '', 2),
+(1330, 603, '证书补发', '', '', 'F', 'biz:cert:issue',    '', 1);
+
+INSERT INTO sys_role_menu (role_id, menu_id) VALUES
+(2, 600),(2, 601),(2, 602),(2, 603),(2, 604),(2, 605),(2, 606),
+(2, 1300),(2, 1310),(2, 1320),(2, 1321),(2, 1330),
+(3, 604),(3, 605),(3, 606);
+
+INSERT INTO sys_config (id, config_name, config_key, config_value, remark) VALUES
+(5, '预警-时间过半学时进度', 'warn.ratio.mid', '0.3', '年度时间进度达50%时学时进度低于该值记黄色预警'),
+(6, '预警-三季度学时进度', 'warn.ratio.q3', '0.5', '年度时间进度达75%时学时进度低于该值记橙色预警'),
+(7, '预警-年末学时进度', 'warn.ratio.end', '0.7', '年度时间进度达90%时学时进度低于该值记红色预警');

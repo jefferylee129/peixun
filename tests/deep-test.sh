@@ -449,6 +449,100 @@ assert "D10.19 删除测试数据源" "d['code']" 200
 req GET "/biz/integrations/sources/$SRCID" "$ADMIN"
 assert "D10.20 已删数据源查询不存在" "d['code']" 400
 
+# ============ 11. 一人一档/学时预警/消息中心 ============
+section "11. 培训档案与学时预警(对标国企干部培训档案)"
+req GET /biz/archive/my "$U1"
+assert "D11.1 我的档案可查" "d['code']" 200
+assert "D11.2 档案含基本信息与学时汇总" "d['data']['user']['nickname'] is not None and d['data']['hours']['required'] is not None" True
+assert "D11.3 档案含履历时间线与明细页签" "isinstance(d['data']['timeline'], list) and isinstance(d['data']['classes'], list)" True
+req GET /biz/archive/user/1 "$U1"
+assert "D11.4 员工查他人档案被拒" "d['code']" 403
+req GET /biz/archive/user/3 "$TA"
+assert "D11.5 管理员查他人档案" "d['data']['user']['nickname']" "张三"
+req GET /biz/archive/warnings "$TA"
+assert "D11.6 达标预警名单可查" "d['code']" 200
+req GET /biz/archive/my-warning "$U1"
+assert "D11.7 我的预警可查(可为空)" "d['code']" 200
+req POST "/biz/archive/warnings/push?year=$YEAR" "$TA"
+assert "D11.8 管理员推送预警消息" "d['code']" 200
+req GET /biz/messages/unread-count "$ADMIN"
+assert "D11.9 预警推送产生未读消息" "d['data']>=1" True
+req PUT /biz/messages/read-all "$ADMIN"
+assert "D11.10 全部已读" "d['code']" 200
+req GET /biz/messages/unread-count "$ADMIN"
+assert "D11.11 已读后未读清零" "d['data']" 0
+req POST /biz/messages/announce "$TA" "{\"title\":\"D11公告-$TS\",\"content\":\"深度测试公告\"}"
+assert "D11.12 管理员发布全员公告" "d['code']" 200
+req GET "/biz/messages/my?page=1&size=5&type=system" "$U1"
+assert "D11.13 员工收到系统公告" "len(d['data']['records'])>=1" True
+
+# ============ 12. 结业证书与在线考试(柯氏二级) ============
+section "12. 结业证书与在线考试"
+req POST /biz/certificates/class/1/issue "$TA"
+assert "D12.1 已结业班次补发证书(幂等)" "d['code']" 200
+req GET "/biz/certificates?page=1&size=5&keyword=$(enc "张三")" "$TA"
+assert "D12.2 证书台账含结业学员" "d['data']['total']>=1" True
+assert "D12.3 证书编号规范(QGPX-)" "str(d['data']['records'][0]['certNo']).startswith('QGPX-')" True
+req GET /biz/certificates/my "$U1"
+assert "D12.4 我的证书可查" "len(d['data'])>=1" True
+req GET /biz/certificates "$U1"
+assert "D12.5 员工无证书台账权限" "d['code']" 403
+# 考试用班次
+req POST /biz/classes "$TA" "{\"className\":\"TESTDX-CL-$TS\",\"planId\":$PID,\"classType\":\"internal\",\"deptId\":3,\"startDate\":\"$YEAR-11-01\",\"endDate\":\"$YEAR-11-02\",\"capacity\":10}"
+assert "D12.6 新增考试用班次" "d['code']" 200
+req GET "/biz/classes?page=1&size=5&keyword=TESTDX-CL-$TS" "$TA"
+XCL=$(gid "D12考试班次ID" "d['data']['records'][0]['id']")
+req POST "/biz/classes/$XCL/students" "$TA" '{"userIds":[3,4]}'
+assert "D12.7 添加考试班学员" "d['code']" 200
+req PUT "/biz/classes/$XCL/status?status=2" "$ADMIN"
+assert "D12.8 班次直接开始" "d['code']" 200
+# 题库
+req POST /biz/questions "$TA" '{"qType":"single","stem":"D12安全生产培训主要目的是?","options":"[{\"key\":\"A\",\"text\":\"提升安全意识\"},{\"key\":\"B\",\"text\":\"增加工时\"},{\"key\":\"C\",\"text\":\"应付检查\"},{\"key\":\"D\",\"text\":\"形式主义\"}]","answer":"A","analysis":"安全第一"}'
+assert "D12.9 新增单选题" "d['code']" 200
+req POST /biz/questions "$TA" '{"qType":"multiple","stem":"D12属于安全操作规程的有?","options":"[{\"key\":\"A\",\"text\":\"持证上岗\"},{\"key\":\"B\",\"text\":\"佩戴劳保\"},{\"key\":\"C\",\"text\":\"违章作业\"},{\"key\":\"D\",\"text\":\"危险作业审批\"}]","answer":"ABD"}'
+assert "D12.10 新增多选题" "d['code']" 200
+req POST /biz/questions "$TA" '{"qType":"judge","stem":"D12迟到按节学时乘系数折算。","answer":"对"}'
+assert "D12.11 新增判断题" "d['code']" 200
+req POST /biz/questions "$TA" '{"qType":"judge","stem":"D12判断题答案可为任意文本。","answer":"abc"}'
+assert "D12.12 非法判断题答案被拒" "d['code']" 400
+req POST /biz/questions "$TA" '{"qType":"single","stem":"D12答案不在选项中校验","options":"[{\"key\":\"A\",\"text\":\"x\"},{\"key\":\"B\",\"text\":\"y\"}]","answer":"Z"}'
+assert "D12.13 答案越界被拒" "d['code']" 400
+req POST /biz/questions "$TA" '{"qType":"single","stem":"D12学时台账唯一口径是?","options":"[{\"key\":\"A\",\"text\":\"已认定学时记录\"},{\"key\":\"B\",\"text\":\"签到次数\"},{\"key\":\"C\",\"text\":\"证书数量\"},{\"key\":\"D\",\"text\":\"评估均分\"}]","answer":"A"}'
+assert "D12.14 新增第4题(凑整百)" "d['code']" 200
+req GET "/biz/questions?page=1&size=5&keyword=D12" "$TA"
+Q4=$(gid "D12题4" "d['data']['records'][0]['id']")
+Q3=$(gid "D12题3" "d['data']['records'][1]['id']")
+Q2=$(gid "D12题2" "d['data']['records'][2]['id']")
+Q1=$(gid "D12题1" "d['data']['records'][3]['id']")
+# 考试
+req POST /biz/exams "$TA" "{\"title\":\"TESTDX-考试-$TS\",\"classId\":$XCL,\"durationMin\":30,\"passScore\":60,\"totalScore\":100,\"hourReward\":2,\"questionIds\":\"$Q1,$Q2,$Q3,$Q4\"}"
+assert "D12.15 新建考试草稿" "d['code']" 200
+req POST /biz/exams "$TA" "{\"title\":\"TESTDX-空卷-$TS\",\"classId\":$XCL,\"questionIds\":\"\"}"
+assert "D12.16 未选题组卷被拒" "d['code']" 400
+req GET "/biz/exams?page=1&size=5&keyword=$(enc "TESTDX-考试-$TS")" "$TA"
+XEX=$(gid "D12考试ID" "d['data']['records'][0]['id']")
+req PUT "/biz/exams/$XEX/publish" "$ADMIN"
+assert "D12.17 发布考试(通知学员)" "d['code']" 200
+req GET "/biz/exams/$XEX/paper" "$U3"
+assert "D12.18 非学员取卷被拒" "d['code']" 400
+req GET "/biz/exams/$XEX/paper" "$U1"
+assert "D12.19 学员取卷" "d['code']" 200
+assert "D12.20 试卷不含答案" "all('answer' not in q for q in d['data']['questions'])" True
+req POST "/biz/exams/$XEX/submit" "$U1" "{\"answers\":{\"$Q1\":\"A\",\"$Q2\":\"ABD\",\"$Q3\":\"对\",\"$Q4\":\"A\"}}"
+assert "D12.21 全对交卷得满分" "d['data']['score']" 100.0
+assert "D12.22 及格" "d['data']['passed']" True
+assert "D12.23 及格计学时" "d['data']['hourReward']" 2.0
+req POST "/biz/exams/$XEX/submit" "$U1" "{\"answers\":{\"$Q1\":\"A\"}}"
+assert "D12.24 重复交卷被拒" "d['code']" 400
+req GET "/biz/exams/$XEX/records" "$TA"
+assert "D12.25 成绩单可查" "d['data']['submittedCount']" 1
+req GET /biz/exams/my "$U1"
+assert "D12.26 我的考试列表含已交卷考试" "any(r['id']==$XEX and r['submitted'] for r in d['data'])" True
+req GET /biz/archive/my "$U1"
+assert "D12.27 档案聚合考试成绩" "any(e['examId']==$XEX for e in d['data']['exams'])" True
+req GET /biz/archive/my "$U1"
+assert "D12.28 档案聚合考试学时来源" "any(int(s['source'])==4 for s in d['data']['hours']['bySource'])" True
+
 # ============ 汇总 ============
 echo
 echo "==================================="

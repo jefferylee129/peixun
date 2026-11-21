@@ -8,6 +8,7 @@ import com.soe.training.common.PageResult;
 import com.soe.training.domain.Attendance;
 import com.soe.training.domain.ClassSchedule;
 import com.soe.training.domain.ClassStudent;
+import com.soe.training.domain.EvalRecord;
 import com.soe.training.domain.HourRecord;
 import com.soe.training.domain.TrainingClass;
 import com.soe.training.domain.vo.AttendanceVo;
@@ -17,6 +18,7 @@ import com.soe.training.domain.vo.StudentVo;
 import com.soe.training.mapper.AttendanceMapper;
 import com.soe.training.mapper.ClassMapper;
 import com.soe.training.mapper.ClassStudentMapper;
+import com.soe.training.mapper.EvalRecordMapper;
 import com.soe.training.mapper.HourRecordMapper;
 import com.soe.training.mapper.ScheduleMapper;
 import com.soe.training.security.AuthContext;
@@ -48,6 +50,9 @@ public class ClassService {
     private final AttendanceMapper attendanceMapper;
     private final HourRecordMapper hourRecordMapper;
     private final ConfigService configService;
+    private final CertificateService certificateService;
+    private final MessageService messageService;
+    private final EvalRecordMapper evalRecordMapper;
 
     public PageResult<ClassVo> page(int page, int size, String status, Integer year,
                                     Long deptId, String keyword) {
@@ -153,6 +158,17 @@ public class ClassService {
         u.setId(id);
         u.setStatus(status);
         classMapper.updateById(u);
+        // 消息触达: 发布报名通知全员; 开始培训通知学员 (对标企业学习平台的消息中心)
+        if ("1".equals(status)) {
+            messageService.sendBatch(messageService.activeUserIds(), "enroll", "班次开放报名",
+                    "「" + c.getClassName() + "」已开放报名, 名额 "
+                            + (c.getCapacity() == null ? "不限" : c.getCapacity()) + " 人, 欢迎报名参加。", id);
+        } else if ("2".equals(status)) {
+            List<Long> studentIds = studentMapper.selectByClassId(id)
+                    .stream().map(StudentVo::getUserId).toList();
+            messageService.sendBatch(studentIds, "enroll", "培训班已开始",
+                    "您报名的「" + c.getClassName() + "」已开始, 请按课表按时签到。", id);
+        }
         // 结班时: 先自动结束未上课节 → 重算签到学时 → 再把无学时的报名学员标缺勤
         // 顺序不能反, 否则已签到但学时还未生成的学员会被误标缺勤; 已取消(status=2)的课节不动
         if ("3".equals(status)) {
@@ -165,7 +181,8 @@ public class ClassService {
                 scheduleMapper.updateById(su);
             }
             recomputeClassHours(id);
-            for (StudentVo st : studentMapper.selectByClassId(id)) {
+            List<StudentVo> finished = studentMapper.selectByClassId(id);
+            for (StudentVo st : finished) {
                 if ("0".equals(st.getStatus())
                         && (st.getTotalHours() == null
                             || st.getTotalHours().compareTo(BigDecimal.ZERO) == 0)) {
@@ -175,6 +192,22 @@ public class ClassService {
                     studentMapper.updateById(su);
                 }
             }
+            // 评估催办: 未作答任一模板的学员逐一提醒
+            List<Long> evalPending = new ArrayList<>();
+            for (StudentVo st : finished) {
+                Long cnt = evalRecordMapper.selectCount(new LambdaQueryWrapper<EvalRecord>()
+                        .eq(EvalRecord::getClassId, id)
+                        .eq(EvalRecord::getUserId, st.getUserId()));
+                if (cnt == null || cnt == 0) {
+                    evalPending.add(st.getUserId());
+                }
+            }
+            if (!evalPending.isEmpty()) {
+                messageService.sendBatch(evalPending, "eval", "培训评估待填写",
+                        "「" + c.getClassName() + "」已结业, 请尽快完成培训评估问卷, 您的反馈用于持续改进。", id);
+            }
+            // 结业证书: 已完成学员自动发证(幂等)
+            certificateService.issueForClass(id);
         }
     }
 

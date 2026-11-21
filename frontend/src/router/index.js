@@ -34,7 +34,15 @@ const routes = [
       { path: 'system/config', component: () => import('@/views/system/config.vue'), meta: { title: '参数设置' } },
       { path: 'system/log', component: () => import('@/views/system/log.vue'), meta: { title: '操作日志' } },
       { path: 'my-class', component: () => import('@/views/mine/class.vue'), meta: { title: '我的班级' } },
-      { path: 'my-hours', component: () => import('@/views/mine/hours.vue'), meta: { title: '我的学时' } }
+      { path: 'my-hours', component: () => import('@/views/mine/hours.vue'), meta: { title: '我的学时' } },
+      { path: 'my-archive', component: () => import('@/views/archive/my.vue'), meta: { title: '我的档案' } },
+      { path: 'messages', component: () => import('@/views/message/index.vue'), meta: { title: '消息中心' } },
+      { path: 'my-exam', component: () => import('@/views/exam/my.vue'), meta: { title: '在线考试' } },
+      { path: 'exam-do/:id', component: () => import('@/views/exam/do.vue'), meta: { title: '考试作答' } },
+      { path: 'archive', component: () => import('@/views/archive/index.vue'), meta: { title: '培训档案' } },
+      { path: 'question', component: () => import('@/views/exam/question.vue'), meta: { title: '题库管理' } },
+      { path: 'exam', component: () => import('@/views/exam/index.vue'), meta: { title: '考试管理' } },
+      { path: 'certificates', component: () => import('@/views/cert/index.vue'), meta: { title: '证书台账' } }
     ]
   },
   {

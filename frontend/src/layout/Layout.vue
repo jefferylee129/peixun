@@ -36,7 +36,11 @@
           <el-breadcrumb-item :to="{ path: '/dashboard' }">首页</el-breadcrumb-item>
           <el-breadcrumb-item v-if="$route.meta.title">{{ $route.meta.title }}</el-breadcrumb-item>
         </el-breadcrumb>
-        <el-dropdown @command="onCommand">
+        <div class="header-right">
+          <el-badge :value="unread" :hidden="!unread" :max="99" class="bell">
+            <el-icon :size="18" class="bell-icon" @click="router.push('/messages')"><Bell /></el-icon>
+          </el-badge>
+          <el-dropdown @command="onCommand">
           <span class="user-entry">
             <el-avatar :size="28" class="avatar">
               {{ (store.user && store.user.nickname ? store.user.nickname : '用').slice(0, 1) }}
@@ -51,6 +55,7 @@
             </el-dropdown-menu>
           </template>
         </el-dropdown>
+        </div>
       </el-header>
       <el-main class="main">
         <router-view />
@@ -78,17 +83,38 @@
 </template>
 
 <script setup>
-import { computed, reactive, ref } from 'vue'
+import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useUserStore } from '@/store/user'
 import { changePassword } from '@/api/auth'
+import { unreadCount } from '@/api/optimize'
 
 const store = useUserStore()
 const route = useRoute()
 const router = useRouter()
 
 const activeMenu = computed(() => route.path)
+
+// 消息未读红点: 30s 轮询 + 回到消息中心时刷新
+const unread = ref(0)
+let msgTimer = null
+async function loadUnread() {
+  try {
+    const res = await unreadCount()
+    unread.value = Number(res.data) || 0
+  } catch (e) {
+    /* 静默失败, 不打断页面 */
+  }
+}
+onMounted(() => {
+  loadUnread()
+  msgTimer = setInterval(loadUnread, 30000)
+})
+onUnmounted(() => clearInterval(msgTimer))
+watch(route, () => {
+  if (route.path === '/messages') loadUnread()
+})
 
 const pwdVisible = ref(false)
 const pwdSaving = ref(false)
@@ -194,6 +220,21 @@ function savePassword() {
   cursor: pointer;
   gap: 4px;
   color: #303133;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.bell-icon {
+  cursor: pointer;
+  color: #606266;
+}
+
+.bell-icon:hover {
+  color: #1677ff;
 }
 
 .avatar {

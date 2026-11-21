@@ -149,7 +149,7 @@ public class HoursService {
         return statsMapper.monthHours(y);
     }
 
-    private BigDecimal requiredOf(String userType) {
+    public BigDecimal requiredOf(String userType) {
         String value = switch (userType) {
             case "manager" -> configService.getValue("hour.required.manager", "110");
             case "professional" -> configService.getValue("hour.required.professional", "90");

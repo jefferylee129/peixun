@@ -15,6 +15,16 @@
       </el-card>
     </div>
 
+    <!-- 学时预警(个人) -->
+    <el-alert
+      v-if="myWarn"
+      :title="myWarnText"
+      :type="myWarn.level === 'red' ? 'error' : 'warning'"
+      show-icon
+      :closable="false"
+      class="warn-alert"
+    />
+
     <!-- 图表 -->
     <div class="chart-row" v-if="store.hasPerm('biz:stats:view')">
       <el-card shadow="never">
@@ -55,6 +65,35 @@
       </el-card>
     </div>
 
+    <!-- 学时预警(管理) -->
+    <el-card shadow="never" v-if="store.hasPerm('biz:archive:other')">
+      <template #header>
+        <div class="warn-head">
+          <span>学时达标预警({{ warnRows.length }}人)</span>
+          <el-button size="small" type="danger" plain :loading="pushing" @click="pushWarn">
+            推送预警消息
+          </el-button>
+        </div>
+      </template>
+      <el-table v-if="warnRows.length" :data="warnRows" size="small">
+        <el-table-column prop="userName" label="姓名" width="110" />
+        <el-table-column prop="employeeNo" label="工号" width="110" />
+        <el-table-column prop="deptName" label="部门" min-width="140" />
+        <el-table-column label="学时/要求" width="110" align="center">
+          <template #default="{ row }">{{ row.totalHours }} / {{ row.required }}</template>
+        </el-table-column>
+        <el-table-column prop="percent" label="完成率(%)" width="100" align="center" />
+        <el-table-column label="预警级别" width="120" align="center">
+          <template #default="{ row }">
+            <el-tag :type="row.level === 'red' ? 'danger' : row.level === 'orange' ? 'warning' : 'info'" size="small">
+              {{ WARN_LEVEL[row.level] }}
+            </el-tag>
+          </template>
+        </el-table-column>
+      </el-table>
+      <el-empty v-else description="当前无触发预警人员" :image-size="60" />
+    </el-card>
+
     <!-- 最近班次 -->
     <el-card shadow="never" v-if="store.hasPerm('biz:class:list')">
       <template #header>最近培训班次</template>
@@ -79,10 +118,12 @@
 <script setup>
 import { computed, onMounted, ref, watch, nextTick } from 'vue'
 import * as echarts from 'echarts'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { useUserStore } from '@/store/user'
 import { statsOverview, statsMonthHours, statsDeptHours, statsCourseCategory } from '@/api/train'
 import { myHourSummary } from '@/api/train'
 import { pageClass } from '@/api/train'
+import { myWarning, warnings as warningsApi, pushWarnings } from '@/api/optimize'
 import { NEED_TYPE, CLASS_STATUS } from '@/utils/constants'
 
 const store = useUserStore()
@@ -91,6 +132,15 @@ const year = new Date().getFullYear()
 const overview = ref({})
 const mySummary = ref({})
 const recentClasses = ref([])
+const myWarn = ref(null)
+const warnRows = ref([])
+const pushing = ref(false)
+const WARN_LEVEL = { yellow: '黄色预警', orange: '橙色预警', red: '红色预警' }
+
+const myWarnText = computed(() =>
+  `学时预警: 您的${year}年度培训学时 ${myWarn.value.totalHours}/${myWarn.value.required}, ` +
+  `已落后于年度时间进度, 请合理安排参训。`
+)
 const monthChartRef = ref()
 const categoryChartRef = ref()
 const deptChartRef = ref()
@@ -177,6 +227,21 @@ onMounted(async () => {
     const res = await pageClass({ page: 1, size: 5 })
     recentClasses.value = res.data.records
   }
+  // 预警看板: 个人预警 + 管理员全员预警
+  try {
+    const res = await myWarning({ year })
+    myWarn.value = res.data
+  } catch (e) {
+    myWarn.value = null
+  }
+  if (store.hasPerm('biz:archive:other')) {
+    try {
+      const res = await warningsApi({ year })
+      warnRows.value = res.data || []
+    } catch (e) {
+      warnRows.value = []
+    }
+  }
   try {
     const res = await myHourSummary({ year })
     mySummary.value = res.data
@@ -184,9 +249,25 @@ onMounted(async () => {
     mySummary.value = {}
   }
 })
+
+async function pushWarn() {
+  await ElMessageBox.confirm('向当前全部触发预警的员工发送站内提醒?', '推送预警', { type: 'warning' })
+  const res = await pushWarnings({ year })
+  ElMessage.success(`已向 ${res.data} 名员工推送预警提醒`)
+}
 </script>
 
 <style scoped>
+.warn-alert {
+  margin-bottom: 12px;
+}
+
+.warn-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
 .stat-card {
   display: flex;
   align-items: center;

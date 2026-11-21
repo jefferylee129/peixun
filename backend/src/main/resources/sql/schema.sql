@@ -347,3 +347,86 @@ CREATE TABLE IF NOT EXISTS biz_eval_record (
   KEY idx_eval_class (class_id),
   KEY idx_eval_user (user_id)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '评估记录表';
+
+-- =====================================================================
+-- 行业对标优化: 消息 / 证书 / 题库 / 考试
+-- =====================================================================
+CREATE TABLE IF NOT EXISTS biz_message (
+  id          BIGINT AUTO_INCREMENT PRIMARY KEY,
+  user_id     BIGINT NOT NULL COMMENT '接收人',
+  title       VARCHAR(200) NOT NULL,
+  content     VARCHAR(1000) DEFAULT NULL,
+  msg_type    VARCHAR(20)  NOT NULL DEFAULT 'system' COMMENT 'warn/enroll/eval/cert/exam/system',
+  ref_id      BIGINT DEFAULT NULL COMMENT '关联业务ID',
+  is_read     TINYINT NOT NULL DEFAULT 0,
+  create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+  update_time DATETIME DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+  del_flag    TINYINT NOT NULL DEFAULT 0,
+  KEY idx_msg_user (user_id, is_read),
+  KEY idx_msg_type (msg_type)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '站内消息';
+
+CREATE TABLE IF NOT EXISTS biz_certificate (
+  id          BIGINT AUTO_INCREMENT PRIMARY KEY,
+  cert_no     VARCHAR(50) DEFAULT NULL COMMENT '证书编号 QGPX-YYYY-XXXXXX(插入后回填)',
+  user_id     BIGINT NOT NULL,
+  class_id    BIGINT NOT NULL,
+  hours       DECIMAL(6, 1) DEFAULT 0 COMMENT '结业学时',
+  grade       VARCHAR(20) DEFAULT '合格' COMMENT '合格/优秀',
+  issue_date  DATE DEFAULT NULL,
+  create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+  update_time DATETIME DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+  del_flag    TINYINT NOT NULL DEFAULT 0,
+  UNIQUE KEY uk_cert_class_user (class_id, user_id),
+  UNIQUE KEY uk_cert_no (cert_no),
+  KEY idx_cert_user (user_id)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '结业证书';
+
+CREATE TABLE IF NOT EXISTS biz_question (
+  id          BIGINT AUTO_INCREMENT PRIMARY KEY,
+  course_id   BIGINT DEFAULT NULL COMMENT '关联课程(可空)',
+  q_type      VARCHAR(10) NOT NULL COMMENT 'single单选/multiple多选/judge判断',
+  stem        VARCHAR(1000) NOT NULL,
+  options     TEXT COMMENT 'JSON [{"key":"A","text":"..."}]; 判断题为["对","错"]',
+  answer      VARCHAR(20) NOT NULL COMMENT 'A / ABD / 对',
+  analysis    VARCHAR(500) DEFAULT NULL,
+  status      CHAR(1) NOT NULL DEFAULT '0' COMMENT '0启用 1停用',
+  create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+  update_time DATETIME DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+  del_flag    TINYINT NOT NULL DEFAULT 0,
+  KEY idx_q_course (course_id)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '考试题库';
+
+CREATE TABLE IF NOT EXISTS biz_exam (
+  id           BIGINT AUTO_INCREMENT PRIMARY KEY,
+  title        VARCHAR(200) NOT NULL,
+  class_id     BIGINT NOT NULL COMMENT '关联班次',
+  course_id    BIGINT DEFAULT NULL,
+  duration_min INT NOT NULL DEFAULT 30 COMMENT '考试时长(分钟)',
+  pass_score   DECIMAL(5, 1) NOT NULL DEFAULT 60,
+  total_score  DECIMAL(5, 1) NOT NULL DEFAULT 100,
+  hour_reward  DECIMAL(4, 1) NOT NULL DEFAULT 0 COMMENT '及格计学时',
+  question_ids VARCHAR(2000) NOT NULL DEFAULT '' COMMENT '题目ID逗号分隔',
+  start_time   DATETIME DEFAULT NULL,
+  end_time     DATETIME DEFAULT NULL,
+  status       CHAR(1) NOT NULL DEFAULT '0' COMMENT '0草稿 1已发布 2已截止',
+  create_time  DATETIME DEFAULT CURRENT_TIMESTAMP,
+  update_time  DATETIME DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+  del_flag     TINYINT NOT NULL DEFAULT 0,
+  KEY idx_exam_class (class_id)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '在线考试';
+
+CREATE TABLE IF NOT EXISTS biz_exam_record (
+  id          BIGINT AUTO_INCREMENT PRIMARY KEY,
+  exam_id     BIGINT NOT NULL,
+  user_id     BIGINT NOT NULL,
+  answers     TEXT COMMENT '作答JSON {qid:"A"|"ABD"}',
+  score       DECIMAL(5, 1) DEFAULT 0,
+  passed      TINYINT DEFAULT 0,
+  start_time  DATETIME DEFAULT NULL COMMENT '首次开卷时间',
+  submit_time DATETIME DEFAULT NULL,
+  create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+  update_time DATETIME DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+  del_flag    TINYINT NOT NULL DEFAULT 0,
+  UNIQUE KEY uk_er_exam_user (exam_id, user_id)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '考试作答';

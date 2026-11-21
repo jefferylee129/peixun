@@ -10,12 +10,19 @@ import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
 
 import java.math.BigDecimal;
+import java.util.List;
+import java.util.Map;
 
 public interface HourRecordMapper extends BaseMapper<HourRecord> {
 
     @Select("SELECT IFNULL(SUM(hours), 0) FROM biz_hour_record " +
             "WHERE del_flag = 0 AND status = '1' AND user_id = #{userId} AND year = #{year}")
     BigDecimal sumUserHours(@Param("userId") Long userId, @Param("year") Integer year);
+
+    /** 按来源汇总年度已认定学时(档案用): source → total */
+    @Select("SELECT source, IFNULL(SUM(hours), 0) AS total FROM biz_hour_record " +
+            "WHERE del_flag = 0 AND status = '1' AND user_id = #{userId} AND year = #{year} GROUP BY source")
+    List<Map<String, Object>> sumBySource(@Param("userId") Long userId, @Param("year") Integer year);
 
     /**
      * 物理删除签到自动生成的学时(可由签到记录重建的派生数据)。
