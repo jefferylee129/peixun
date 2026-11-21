@@ -79,10 +79,19 @@ public class ExamService {
         if (q.getStem() == null || q.getStem().isBlank()) {
             throw new BusinessException("请填写题干");
         }
+        if (q.getStem().length() > 1000) {
+            throw new BusinessException("题干过长(最多1000字)");
+        }
+        if (q.getAnalysis() != null && q.getAnalysis().length() > 500) {
+            throw new BusinessException("答案解析过长(最多500字)");
+        }
         if (q.getAnswer() == null || q.getAnswer().isBlank()) {
             throw new BusinessException("请填写正确答案");
         }
         String answer = normalizeAnswer(q.getQType(), q.getAnswer());
+        if ("single".equals(q.getQType()) && answer.length() != 1) {
+            throw new BusinessException("单选题答案只能是一个选项");
+        }
         if ("judge".equals(q.getQType())) {
             if (!"对".equals(answer) && !"错".equals(answer)) {
                 throw new BusinessException("判断题答案仅允许 对/错");
@@ -209,6 +218,15 @@ public class ExamService {
         if (e.getHourReward() == null) {
             e.setHourReward(BigDecimal.ZERO);
         }
+        if (e.getHourReward().compareTo(BigDecimal.ZERO) < 0) {
+            throw new BusinessException("及格计学时不能为负数");
+        }
+        if (e.getTitle() != null && e.getTitle().length() > 200) {
+            throw new BusinessException("考试名称过长(最多200字)");
+        }
+        if (e.getDurationMin() != null && e.getDurationMin() > 240) {
+            throw new BusinessException("考试时长不能超过240分钟");
+        }
         List<Long> qids = questionIdList(e.getQuestionIds());
         if (qids.isEmpty()) {
             throw new BusinessException("请从题库选题组卷");
@@ -298,6 +316,10 @@ public class ExamService {
             if (!"1".equals(e.getStatus())) {
                 throw new BusinessException("考试未发布或已截止");
             }
+            if (!member) {
+                // 管理员预览: 只下发试题不建作答记录, 不产生成绩与学时
+                return paperPreview(e);
+            }
             rec = new ExamRecord();
             rec.setExamId(examId);
             rec.setUserId(uid);
@@ -341,6 +363,34 @@ public class ExamService {
         return result;
     }
 
+    /** 管理员预览试卷(不建作答记录, 无倒计时与续答) */
+    private Map<String, Object> paperPreview(Exam e) {
+        List<Map<String, Object>> questions = new ArrayList<>();
+        for (Question q : questionMapper.selectBatchIds(questionIdList(e.getQuestionIds()))) {
+            Map<String, Object> qi = new LinkedHashMap<>();
+            qi.put("id", q.getId());
+            qi.put("qType", q.getQType());
+            qi.put("stem", q.getStem());
+            qi.put("options", parseOptions(q));
+            questions.add(qi);
+        }
+        Map<String, Object> result = new HashMap<>();
+        Map<String, Object> examInfo = new HashMap<>();
+        examInfo.put("id", e.getId());
+        examInfo.put("title", e.getTitle() + "(预览)");
+        examInfo.put("durationMin", e.getDurationMin());
+        examInfo.put("totalScore", e.getTotalScore());
+        examInfo.put("passScore", e.getPassScore());
+        examInfo.put("endTime", e.getEndTime());
+        result.put("exam", examInfo);
+        result.put("questions", questions);
+        result.put("deadline", e.getEndTime());
+        result.put("remainingSeconds", 0);
+        result.put("savedAnswers", Map.of());
+        result.put("preview", true);
+        return result;
+    }
+
     @Transactional
     public Map<String, Object> submit(Long examId, Map<String, Object> answers) {
         Exam e = getOrThrow(examId);
@@ -348,7 +398,7 @@ public class ExamService {
         if (!"1".equals(e.getStatus())) {
             throw new BusinessException("考试未发布或已截止");
         }
-        if (studentMapper.selectOne(e.getClassId(), uid) == null && !isAdmin()) {
+        if (studentMapper.selectOne(e.getClassId(), uid) == null) {
             throw new BusinessException("您不是该班次学员, 不能交卷");
         }
         ExamRecord rec = recordOf(examId, uid);
@@ -441,17 +491,18 @@ public class ExamService {
             score = e.getTotalScore();
         }
         boolean passed = score.compareTo(e.getPassScore()) >= 0;
-        ExamRecord u = new ExamRecord();
-        u.setId(rec.getId());
+        // 原子交卷守卫: 并发双交卷只有一方生效, 杜绝重复计分与学时双发
+        String answersJson;
         try {
-            u.setAnswers(objectMapper.writeValueAsString(answers));
-        } catch (Exception ignored) {
-            // 作答快照失败不影响判分
+            answersJson = objectMapper.writeValueAsString(answers);
+        } catch (Exception ex) {
+            answersJson = "{}";
         }
-        u.setScore(score);
-        u.setPassed(passed ? 1 : 0);
-        u.setSubmitTime(LocalDateTime.now());
-        examRecordMapper.updateById(u);
+        int rows = examRecordMapper.markSubmitted(rec.getId(), answersJson, score,
+                passed ? 1 : 0, LocalDateTime.now());
+        if (rows == 0) {
+            throw new BusinessException("已交卷, 不能重复提交");
+        }
         // 及格计学时(线上学习来源, 直接认定; 同一考试仅计一次)
         BigDecimal rewarded = BigDecimal.ZERO;
         if (passed && e.getHourReward() != null && e.getHourReward().compareTo(BigDecimal.ZERO) > 0) {

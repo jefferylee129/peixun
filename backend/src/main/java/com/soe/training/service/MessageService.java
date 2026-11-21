@@ -90,9 +90,15 @@ public class MessageService {
                 .stream().map(SysUser::getId).toList();
     }
 
-    /** 全员系统公告 */
+    /** 全员系统公告(标题/内容长度与列宽对齐, 超长返回400而非500) */
     @Transactional
     public int announce(String title, String content) {
+        if (title != null && title.length() > 100) {
+            throw new BusinessException("公告标题过长(最多100字)");
+        }
+        if (content != null && content.length() > 1000) {
+            throw new BusinessException("公告内容过长(最多1000字)");
+        }
         List<Long> ids = activeUserIds();
         sendBatch(ids, "system", title, content, null);
         return ids.size();

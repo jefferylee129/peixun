@@ -543,6 +543,93 @@ assert "D12.27 档案聚合考试成绩" "any(e['examId']==$XEX for e in d['data
 req GET /biz/archive/my "$U1"
 assert "D12.28 档案聚合考试学时来源" "any(int(s['source'])==4 for s in d['data']['hours']['bySource'])" True
 
+# ============ 13. 安全加固与健壮性 ============
+section "13. 安全加固与健壮性(漏洞修复验证)"
+req GET /biz/messages/my ""
+assertc "D13.1 未认证访问消息接口401" 401
+req POST /biz/questions "$U1" '{"qType":"judge","stem":"D13越权建题","answer":"对"}'
+assert "D13.2 员工新增题目被拒" "d['code']" 403
+req POST /biz/exams "$U1" "{\"title\":\"D13越权建考\",\"classId\":$XCL,\"questionIds\":\"$Q1\"}"
+assert "D13.3 员工新建考试被拒" "d['code']" 403
+req POST /biz/certificates/class/1/issue "$U1"
+assert "D13.4 员工补发证书被拒" "d['code']" 403
+req POST /biz/messages/announce "$U1" '{"title":"D13越权公告"}'
+assert "D13.5 员工发公告被拒" "d['code']" 403
+req POST "/biz/archive/warnings/push?year=$YEAR" "$U1"
+assert "D13.6 员工推送预警被拒" "d['code']" 403
+# 13.B 参数校验(一律400而非500)
+req POST /biz/exams "$TA" "{\"title\":\"TESTDX-负学时-$TS\",\"classId\":$XCL,\"hourReward\":-2,\"questionIds\":\"$Q1\"}"
+assert "D13.7 负数及格学时被拒" "d['code']" 400
+LONGS=$(python3 -c "print('长'*1100)")
+req POST /biz/questions "$TA" "{\"qType\":\"judge\",\"stem\":\"$LONGS\",\"answer\":\"对\"}"
+assert "D13.8 超长题干400而非500" "d['code']" 400
+req POST /biz/questions "$TA" '{"qType":"single","stem":"D13单选双字母答案","options":"[{\"key\":\"A\",\"text\":\"x\"},{\"key\":\"B\",\"text\":\"y\"}]","answer":"AA"}'
+assert "D13.9 单选多字母答案被拒" "d['code']" 400
+LONGC=$(python3 -c "print('评'*1100)")
+req POST /biz/messages/announce "$TA" "{\"title\":\"D13超长\",\"content\":\"$LONGC\"}"
+assert "D13.10 超长公告被拒" "d['code']" 400
+# 13.C 考试状态机与角色边界
+req GET "/biz/exams/$XEX/paper" "$TA"
+assert "D13.11 非学员培训管理员取卷被拒" "d['code']" 400
+req POST "/biz/exams/$XEX/submit" "$ADMIN" "{\"answers\":{\"$Q1\":\"A\"}}"
+assert "D13.12 管理员非学员代考被拒" "d['code']" 400
+req PUT "/biz/exams/$XEX/publish" "$ADMIN"
+assert "D13.13 重复发布被拒" "d['code']" 400
+req DELETE "/biz/exams/$XEX" "$TA"
+assert "D13.14 删除已发布考试被拒" "d['code']" 400
+req PUT "/biz/exams/$XEX/close" "$ADMIN"
+assert "D13.15 截止考试" "d['code']" 200
+req POST "/biz/exams/$XEX/submit" "$U2" "{\"answers\":{\"$Q1\":\"A\",\"$Q2\":\"ABD\",\"$Q3\":\"对\",\"$Q4\":\"A\"}}"
+assert "D13.16 截止后交卷被拒" "d['code']" 400
+req POST /biz/exams "$TA" "{\"title\":\"TESTDX-草稿2-$TS\",\"classId\":$XCL,\"questionIds\":\"$Q1\"}"
+assert "D13.17 新建草稿考试" "d['code']" 200
+req GET "/biz/exams?page=1&size=5&keyword=$(enc "TESTDX-草稿2-$TS")" "$TA"
+XEX2=$(gid "D13草稿考试ID" "d['data']['records'][0]['id']")
+req PUT "/biz/exams/$XEX2/close" "$ADMIN"
+assert "D13.18 草稿截止被拒" "d['code']" 400
+# 13.E 消息越权与注入
+req GET "/biz/messages/my?page=1&size=1" "$U1"
+MID=$(gid "D13消息ID" "d['data']['records'][0]['id']")
+req PUT "/biz/messages/$MID/read" "$U2"
+assert "D13.19 标记他人消息被拒" "d['code']" 400
+req POST /biz/messages/announce "$TA" '{"title":""}'
+assert "D13.20 空标题公告被拒" "d['code']" 400
+INJ=$(enc "' OR '1'='1")
+req GET "/biz/certificates?page=1&size=5&keyword=$INJ" "$TA"
+assert "D13.21 证书台账查询注入安全" "d['code']" 200
+req GET "/biz/exams?page=1&size=5&keyword=$INJ" "$TA"
+assert "D13.22 考试列表注入安全" "d['code']" 200
+req GET /biz/archive/user/12 "$TA"
+assert "D13.23 已删除用户档案被拒" "d['code']" 400
+req GET /biz/archive/warnings "$U1"
+assert "D13.24 员工预警名单仅含本人" "all(r['userId']==3 for r in d['data'])" True
+# 13.F 并发交卷原子性
+req POST /biz/exams "$TA" "{\"title\":\"TESTDX-并发-$TS\",\"classId\":$XCL,\"durationMin\":30,\"hourReward\":0,\"questionIds\":\"$Q1,$Q2,$Q3,$Q4\"}"
+assert "D13.25 新建并发考试" "d['code']" 200
+req GET "/biz/exams?page=1&size=5&keyword=$(enc "TESTDX-并发-$TS")" "$TA"
+XEX3=$(gid "D13并发考试ID" "d['data']['records'][0]['id']")
+req PUT "/biz/exams/$XEX3/publish" "$ADMIN"
+assert "D13.26 发布并发考试" "d['code']" 200
+req GET "/biz/exams/$XEX3/paper" "$U2"
+assert "D13.27 学员取卷" "d['code']" 200
+curl -s -X POST "$BASE/biz/exams/$XEX3/submit" -H "Authorization: Bearer $U2" -H 'Content-Type: application/json' -d "{\"answers\":{\"$Q1\":\"A\",\"$Q2\":\"ABD\",\"$Q3\":\"对\",\"$Q4\":\"A\"}}" -o /tmp/deep-s1.json &
+P1=$!
+curl -s -X POST "$BASE/biz/exams/$XEX3/submit" -H "Authorization: Bearer $U2" -H 'Content-Type: application/json' -d "{\"answers\":{\"$Q1\":\"A\",\"$Q2\":\"ABD\",\"$Q3\":\"对\",\"$Q4\":\"A\"}}" -o /tmp/deep-s2.json &
+P2=$!
+wait $P1 $P2
+S1=$(bcode /tmp/deep-s1.json); S2=$(bcode /tmp/deep-s2.json)
+if { [ "$S1" == "200" ] && [ "$S2" == "400" ]; } || { [ "$S1" == "400" ] && [ "$S2" == "200" ]; }; then
+  PASS=$((PASS+1)); echo "  PASS D13.28 并发交卷恰好一次生效 ($S1/$S2)"
+else
+  FAIL=$((FAIL+1)); echo "  FAIL D13.28 并发交卷结果异常: $S1/$S2"
+fi
+req GET "/biz/exams/$XEX3/records" "$TA"
+assert "D13.29 并发交卷仅计一次成绩" "d['data']['submittedCount']" 1
+req GET "/biz/exams/$XEX3/paper" "$ADMIN"
+assert "D13.30 管理员预览试卷不建作答记录" "d['data']['preview']" True
+req GET "/biz/exams/$XEX3/records" "$TA"
+assert "D13.31 预览不产生成绩记录" "d['data']['submittedCount']" 1
+
 # ============ 汇总 ============
 echo
 echo "==================================="
