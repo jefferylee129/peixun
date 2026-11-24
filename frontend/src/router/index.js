@@ -42,7 +42,10 @@ const routes = [
       { path: 'archive', component: () => import('@/views/archive/index.vue'), meta: { title: '培训档案' } },
       { path: 'question', component: () => import('@/views/exam/question.vue'), meta: { title: '题库管理' } },
       { path: 'exam', component: () => import('@/views/exam/index.vue'), meta: { title: '考试管理' } },
-      { path: 'certificates', component: () => import('@/views/cert/index.vue'), meta: { title: '证书台账' } }
+      { path: 'certificates', component: () => import('@/views/cert/index.vue'), meta: { title: '证书台账' } },
+      { path: 'learning-map', component: () => import('@/views/map/index.vue'), meta: { title: '学习地图配置' } },
+      { path: 'my-map', component: () => import('@/views/map/my.vue'), meta: { title: '我的学习地图' } },
+      { path: 'cert-verify', component: () => import('@/views/cert/verify.vue'), meta: { title: '证书查验' } }
     ]
   },
   {

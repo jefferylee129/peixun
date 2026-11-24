@@ -18,6 +18,9 @@
             <el-button v-if="canAnnounce" size="small" type="primary" @click="annVisible = true">
               发布公告
             </el-button>
+            <el-button size="small" type="warning" plain :loading="notifyRunning" @click="runNotifyNow">
+              执行提醒扫描
+            </el-button>
           </div>
         </div>
       </template>
@@ -72,6 +75,7 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useUserStore } from '@/store/user'
 import { myMessages, readMessage, readAllMessages, announce } from '@/api/optimize'
+import { runNotify } from '@/api/optimize'
 import Pagination from '@/components/Pagination.vue'
 
 const store = useUserStore()
@@ -127,6 +131,20 @@ async function markAll() {
 const annVisible = ref(false)
 const annSending = ref(false)
 const ann = reactive({ title: '', content: '' })
+
+const notifyRunning = ref(false)
+
+async function runNotifyNow() {
+  notifyRunning.value = true
+  try {
+    const res = await runNotify()
+    const r = res.data || {}
+    ElMessage.success(`提醒扫描完成: 开班提醒 ${r.classStart ?? 0} 条, 评估催办 ${r.evalPending ?? 0} 条, 学时预警 ${r.hourWarn ?? 0} 条(已按去重窗口过滤)`)
+    load(1)
+  } finally {
+    notifyRunning.value = false
+  }
+}
 
 async function sendAnnounce() {
   if (!ann.title.trim()) {

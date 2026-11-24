@@ -5,10 +5,13 @@
       <template #header>
         <div class="card-head">
           <span>培训档案 · 一人一档</span>
-          <el-select v-model="year" style="width: 110px" @change="load">
-            <el-option label="全部年度" :value="0" />
-            <el-option v-for="y in yearOptions()" :key="y" :label="`${y}年`" :value="y" />
-          </el-select>
+          <div class="head-tools">
+            <el-select v-model="year" style="width: 110px" @change="load">
+              <el-option label="全部年度" :value="0" />
+              <el-option v-for="y in yearOptions()" :key="y" :label="`${y}年`" :value="y" />
+            </el-select>
+            <el-button :loading="exporting" @click="doExport">导出档案</el-button>
+          </div>
         </div>
       </template>
       <div class="head-body">
@@ -118,7 +121,9 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { Notebook, ChatDotRound, Medal, EditPen } from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus'
 import { myArchive, userArchive } from '@/api/optimize'
+import { downloadExcel } from '@/utils/download'
 import { CLASS_STATUS, HOUR_SOURCE, USER_TYPE, yearOptions } from '@/utils/constants'
 
 const props = defineProps({
@@ -148,6 +153,25 @@ async function load() {
   info.value = res.data || {}
 }
 
+const exporting = ref(false)
+
+/** 导出一人一档 Excel(后端校验: 本人或具备查他人档案权限) */
+async function doExport() {
+  const uid = props.userId || info.value.user?.id
+  if (!uid) {
+    ElMessage.warning('档案尚未加载')
+    return
+  }
+  exporting.value = true
+  try {
+    const y = year.value || null
+    await downloadExcel('/excel/archive', { userId: uid, year: y },
+      `培训档案-${info.value.user?.nickname || uid}-${y || '全部年度'}`)
+  } finally {
+    exporting.value = false
+  }
+}
+
 onMounted(load)
 </script>
 
@@ -156,6 +180,12 @@ onMounted(load)
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+
+.head-tools {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
 .head-body {

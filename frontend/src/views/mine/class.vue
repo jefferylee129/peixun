@@ -27,8 +27,9 @@
                 </el-tag>
               </template>
             </el-table-column>
-            <el-table-column label="操作" width="110" fixed="right" align="center">
+            <el-table-column label="操作" width="180" fixed="right" align="center">
               <template #default="{ row }">
+                <el-button v-if="row.status === '2'" link type="success" @click="openSign(row)">签到码签到</el-button>
                 <el-button
                   v-if="['2', '3'].includes(row.status) && !row.evalFilled"
                   link
@@ -94,6 +95,26 @@
         <el-button type="primary" :loading="evalSaving" @click="submitEval">提交评估</el-button>
       </template>
     </el-dialog>
+
+    <!-- 自助签到 -->
+    <el-dialog v-model="signVisible" title="签到码签到" width="420px" destroy-on-close>
+      <p class="sign-tip">
+        班次:<b>{{ signRow.className }}</b><br />
+        请输入培训管理员现场公布的 <b>6 位签到码</b>。晚于上课时间签到将按迟到登记。
+      </p>
+      <el-input
+        v-model="signCode"
+        placeholder="请输入 6 位签到码"
+        maxlength="6"
+        size="large"
+        class="sign-input"
+        @keyup.enter="doSelfSign"
+      >
+        <template #append>
+          <el-button type="primary" :loading="signing" @click="doSelfSign">签到</el-button>
+        </template>
+      </el-input>
+    </el-dialog>
   </div>
 </template>
 
@@ -101,6 +122,7 @@
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { myClasses, enrollableClasses, enrollClass, evalPending, evalTemplateFillView, myEvalRecord, fillEval } from '@/api/train'
+import { selfSignByClass } from '@/api/optimize'
 import { CLASS_TYPE, STUDENT_STATUS } from '@/utils/constants'
 import Pagination from '@/components/Pagination.vue'
 
@@ -160,6 +182,33 @@ const evalScores = reactive({})
 const evalComment = ref('')
 const evalTarget = reactive({ classId: null, templateId: null })
 
+const signVisible = ref(false)
+const signRow = ref({})
+const signCode = ref('')
+const signing = ref(false)
+
+function openSign(row) {
+  signRow.value = row
+  signCode.value = ''
+  signVisible.value = true
+}
+
+async function doSelfSign() {
+  if (!/^\d{6}$/.test(signCode.value)) {
+    ElMessage.warning('请输入 6 位数字签到码')
+    return
+  }
+  signing.value = true
+  try {
+    const res = await selfSignByClass(signRow.value.id, signCode.value)
+    ElMessage.success(res.msg || '签到成功')
+    signVisible.value = false
+    loadMine()
+  } finally {
+    signing.value = false
+  }
+}
+
 async function openEval(row) {
   try {
     const pendRes = await evalPending()
@@ -216,3 +265,18 @@ async function submitEval() {
   }
 }
 </script>
+
+<style scoped>
+.sign-tip {
+  color: #606266;
+  line-height: 1.9;
+  margin: 0 0 14px;
+}
+
+.sign-input :deep(.el-input__inner) {
+  letter-spacing: 8px;
+  font-size: 20px;
+  font-weight: 700;
+  text-align: center;
+}
+</style>

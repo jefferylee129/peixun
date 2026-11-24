@@ -36,3 +36,20 @@ export const examRecords = id => request.get(`/biz/exams/${id}/records`)
 export const myExams = () => request.get('/biz/exams/my')
 export const examPaper = id => request.get(`/biz/exams/${id}/paper`)
 export const submitExam = (id, answers) => request.post(`/biz/exams/${id}/submit`, { answers })
+
+// ---------- v1.5 岗位学习地图 ----------
+export const mapMatrix = params => request.get('/biz/learning-map/matrix', { params })
+export const saveMap = data => request.post('/biz/learning-map/save', data)
+export const myMap = params => request.get('/biz/learning-map/my', { params })
+export const mapCompletion = params => request.get('/biz/learning-map/completion', { params })
+
+// ---------- v1.5 自助签到码 ----------
+export const selfSignByClass = (classId, code) => request.put(`/biz/classes/${classId}/self-sign`, { code })
+export const refreshSignCode = sid => request.put(`/biz/classes/schedules/${sid}/refresh-code`)
+
+// ---------- v1.5 自动提醒 / 经费 ----------
+export const runNotify = () => request.post('/biz/notify/run')
+export const statsBudget = params => request.get('/biz/stats/budget', { params })
+
+// ---------- v1.5 证书防伪公开查验(无需登录) ----------
+export const verifyCertificate = params => request.get('/public/certificates/verify', { params })

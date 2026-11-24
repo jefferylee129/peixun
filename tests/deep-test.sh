@@ -630,6 +630,119 @@ assert "D13.30 管理员预览试卷不建作答记录" "d['data']['preview']" T
 req GET "/biz/exams/$XEX3/records" "$TA"
 assert "D13.31 预览不产生成绩记录" "d['data']['submittedCount']" 1
 
+# ============ 14. 岗位学习地图 ============
+section "14. 岗位学习地图(年度必修课包)"
+req POST /biz/learning-map/save "$TA" '{"year":'"$YEAR"',"userType":"professional","courseIds":[1,2]}'
+assert "D14.1 保存专业技术人员必修课" "d['data']" 2
+req POST /biz/learning-map/save "$U1" '{"year":'"$YEAR"',"userType":"professional","courseIds":[1]}'
+assert "D14.2 员工保存学习地图被拒" "d['code']" 403
+req POST /biz/courses "$TA" "{\"courseName\":\"TESTM-$TS\",\"category\":\"general\",\"courseType\":\"internal\",\"hours\":1}"
+req GET "/biz/courses?page=1&size=5&keyword=$(enc "TESTM-$TS")" "$TA"
+DCID=$(gid "D14草稿课程ID" "d['data']['records'][0]['id']")
+req POST /biz/learning-map/save "$TA" "{\"year\":$YEAR,\"userType\":\"professional\",\"courseIds\":[$DCID]}"
+assert "D14.3 未发布课程设为必修被拒" "d['code']" 400
+req DELETE "/biz/courses/$DCID" "$TA"
+req GET "/biz/learning-map/matrix?year=$YEAR" "$TA"
+assert "D14.4 矩阵含必修标记" "any(r['courseId']==1 and 'professional' in (r.get('required') or []) for r in d['data']['rows'])" True
+req GET /biz/learning-map/my "$U1"
+assert "D14.5 我的必修课清单" "d['data']['configured'] == True and d['data']['total'] == 2" True
+assert "D14.6 必修完成状态(种子学时)" "d['data']['done'] >= 1" True
+req GET "/biz/learning-map/completion?year=$YEAR" "$TA"
+assert "D14.7 各类型必修完成率" "any(r['userType']=='professional' and r['people']>=1 for r in d['data'])" True
+req POST /biz/learning-map/save "$TA" '{"year":'"$YEAR"',"userType":"staff","courseIds":[]}'
+assert "D14.8 清空某类型必修课" "d['data']" 0
+req GET "/biz/learning-map/my" "$U3"
+assert "D14.9 未配置类型显示未配置" "d['data']['configured'] == False" True
+
+# ============ 15. 培训经费预算执行 ============
+section "15. 培训经费预算执行"
+req GET "/biz/stats/budget?year=$YEAR" "$TA"
+assert "D15.1 经费执行统计可查" "d['code'] == 200 and d['data']['planBudget'] is not None and 'byDept' in d['data'] and 'byPlan' in d['data']" True
+req GET "/biz/stats/budget?year=$YEAR" "$U1"
+assert "D15.2 员工查经费统计被拒" "d['code']" 403
+req GET "/biz/stats/budget?year=1999" "$TA"
+assert "D15.3 无数据年度统计为0" "d['data']['planBudget'] == 0 and d['data']['classBudget'] == 0" True
+
+# ============ 16. 定时自动提醒 ============
+section "16. 定时自动提醒(手动触发 + 去重)"
+req POST /biz/notify/run "$U1"
+assert "D16.1 员工触发提醒被拒" "d['code']" 403
+req POST /biz/notify/run "$TA"
+assert "D16.2 手动执行提醒扫描" "d['code'] == 200 and 'evalPending' in d['data'] and 'classStart' in d['data'] and 'hourWarn' in d['data']" True
+req POST /biz/notify/run "$TA"
+assert "D16.3 去重窗口内不重复发送" "d['data']['evalPending'] == 0 and d['data']['classStart'] == 0 and d['data']['hourWarn'] == 0" True
+
+# ============ 17. 签到码自助签到 ============
+section "17. 签到码自助签到"
+req POST /biz/classes "$TA" "{\"className\":\"TESTS-签到-$TS\",\"planId\":$PID,\"classType\":\"internal\",\"deptId\":3,\"startDate\":\"$TODAY\",\"endDate\":\"$TODAY\",\"capacity\":10}"
+XSG=$(gid "D17签到班次ID" "d['data']")
+req POST "/biz/classes/$XSG/students" "$TA" '{"userIds":[3]}'
+req POST "/biz/classes/$XSG/schedules" "$TA" "{\"courseId\":1,\"teachDate\":\"$TODAY\",\"startTime\":\"00:00:00\",\"endTime\":\"23:59:00\",\"hours\":2}"
+req GET "/biz/classes/$XSG/schedules" "$TA"
+SSD=$(gid "D17课节ID" "d['data'][0]['id']")
+SCODE=$(gid "D17签到码" "d['data'][0]['signCode']")
+req GET "/biz/classes/$XSG/schedules" "$U1"
+assert "D17.1 学员不能读取课节(签到码不下发)" "d['code']" 403
+SS(){ curl -s -X PUT -H "Authorization: Bearer $1" -H 'Content-Type: application/json' -d "{\"code\":\"$2\"}" "$BASE/biz/classes/$XSG/self-sign" -o "$R"; python3 -c "
+import json
+d = json.load(open('$R'))
+print(d.get('code'), d.get('data') if d.get('data') in ('normal','late') else '')"; }
+R1=$(SS "$U1" "$SCODE"); set -- $R1
+if [ "$1" == "400" ]; then PASS=$((PASS+1)); echo "  PASS D17.2 班次未开始自助签到被拒($R1)"; else FAIL=$((FAIL+1)); echo "  FAIL D17.2 班次未开始自助签到应拒: $R1"; fi
+req PUT "/biz/classes/$XSG/status?status=2" "$ADMIN"
+R1=$(SS "$U3" "$SCODE"); set -- $R1
+if [ "$1" == "400" ]; then PASS=$((PASS+1)); echo "  PASS D17.3 非本班学员自助签到被拒($R1)"; else FAIL=$((FAIL+1)); echo "  FAIL D17.3 非本班学员应拒: $R1"; fi
+R1=$(SS "$U1" "000000"); set -- $R1
+if [ "$1" == "400" ]; then PASS=$((PASS+1)); echo "  PASS D17.4 错误签到码被拒($R1)"; else FAIL=$((FAIL+1)); echo "  FAIL D17.4 错码应拒: $R1"; fi
+R1=$(SS "$U1" "$SCODE"); set -- $R1
+if [ "$1" == "200" ] && [ "$2" == "late" ]; then PASS=$((PASS+1)); echo "  PASS D17.5 正确码签到成功(00:00开课按迟到判定)"; else FAIL=$((FAIL+1)); echo "  FAIL D17.5 签到应成功且为late: $R1"; fi
+R1=$(SS "$U1" "$SCODE"); set -- $R1
+if [ "$1" == "400" ]; then PASS=$((PASS+1)); echo "  PASS D17.6 重复自助签到被拒($R1)"; else FAIL=$((FAIL+1)); echo "  FAIL D17.6 重复应拒: $R1"; fi
+req POST "/biz/classes/schedules/$SSD/attendance" "$TA" '{"userId":3,"signType":"absent"}'
+R1=$(SS "$U1" "$SCODE"); set -- $R1
+if [ "$1" == "400" ]; then PASS=$((PASS+1)); echo "  PASS D17.7 管理员登记缺勤后学员不可自助改勤($R1)"; else FAIL=$((FAIL+1)); echo "  FAIL D17.7 缺勤保护应拒: $R1"; fi
+NEWCODE=$(curl -s -X PUT -H "Authorization: Bearer $TA" "$BASE/biz/classes/schedules/$SSD/refresh-code" -o "$R" -w "%{http_code}" >/dev/null; jget "d['data']")
+R1=$(SS "$U1" "$SCODE"); set -- $R1
+if [ "$1" == "400" ] && [ "$NEWCODE" != "$SCODE" ]; then PASS=$((PASS+1)); echo "  PASS D17.8 刷新后旧签到码失效"; else FAIL=$((FAIL+1)); echo "  FAIL D17.8 旧码应失效: new=$NEWCODE old=$SCODE r=$R1"; fi
+# 课节编辑不可改签到码
+req PUT "/biz/classes/schedules/$SSD" "$TA" "{\"classId\":$XSG,\"signCode\":\"999999\",\"hours\":2}"
+req GET "/biz/classes/$XSG/schedules" "$TA"
+assert "D17.10 编辑课节不可篡改签到码" "d['data'][0]['signCode'] == '$NEWCODE'" True
+
+# 自助签到进入既有学时链路: 管理员改回正常签到并结束课节, 学时应生成
+req POST "/biz/classes/schedules/$SSD/attendance" "$TA" '{"userId":3,"signType":"normal"}'
+req PUT "/biz/classes/schedules/$SSD/finish" "$TA"
+req GET "/biz/classes/$XSG/students" "$TA"
+assert "D17.9 自助签到学时进入台账链路" "[s['totalHours'] for s in d['data'] if s['userId']==3][0]" 2.0
+
+# ============ 18. 证书防伪查验与档案导出 ============
+section "18. 证书防伪查验与档案导出"
+req GET "/biz/certificates?page=1&size=1" "$TA"
+VC=$(gid "D18防伪码" "d['data']['records'][0]['verifyCode']")
+VCNO=$(gid "D18证书编号" "d['data']['records'][0]['certNo']")
+# 公开接口(无token)双要素匹配
+curl -s "$BASE/public/certificates/verify?certNo=$VCNO&code=$VC" -o "$R"
+assert "D18.1 编号+防伪码查验有效" "d['data']['valid'] == True and '*' in d['data']['userName'] and d['data']['certNo'] == '$VCNO'" True
+curl -s "$BASE/public/certificates/verify?certNo=$VCNO&code=000000" -o "$R"
+assert "D18.2 防伪码错误返回无效" "d['data']['valid'] == False" True
+curl -s "$BASE/public/certificates/verify?certNo=QGPX-9999-999999&code=123456" -o "$R"
+assert "D18.3 不存在的证书同样返回无效" "d['data']['valid'] == False" True
+# 档案导出: 本人 / 越权 / 管理员
+CODEA=$(curl -s -H "Authorization: Bearer $U1" "$BASE/excel/archive?userId=3&year=$YEAR" -o /tmp/deep-arch.xlsx -w "%{http_code}")
+if [ "$CODEA" == "200" ] && [ $(wc -c < /tmp/deep-arch.xlsx) -gt 2000 ]; then
+  PASS=$((PASS+1)); echo "  PASS D18.4 本人导出一人一档Excel($(wc -c < /tmp/deep-arch.xlsx)字节)"
+else
+  FAIL=$((FAIL+1)); echo "  FAIL D18.4 本人导出异常: http=$CODEA size=$(wc -c < /tmp/deep-arch.xlsx)"
+fi
+req GET "/excel/archive?userId=4&year=$YEAR" "$U1"
+assert "D18.5 员工导出他人档案被拒" "d['code']" 403
+CODEA=$(curl -s -H "Authorization: Bearer $TA" "$BASE/excel/archive?userId=4&year=$YEAR" -o /tmp/deep-arch2.xlsx -w "%{http_code}")
+if [ "$CODEA" == "200" ] && [ $(wc -c < /tmp/deep-arch2.xlsx) -gt 2000 ]; then
+  PASS=$((PASS+1)); echo "  PASS D18.6 管理员导出他人档案"
+else
+  FAIL=$((FAIL+1)); echo "  FAIL D18.6 管理员导出异常: http=$CODEA"
+fi
+
 # ============ 汇总 ============
 echo
 echo "==================================="

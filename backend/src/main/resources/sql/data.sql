@@ -273,3 +273,25 @@ INSERT INTO sys_config (id, config_name, config_key, config_value, remark) VALUE
 (5, '预警-时间过半学时进度', 'warn.ratio.mid', '0.3', '年度时间进度达50%时学时进度低于该值记黄色预警'),
 (6, '预警-三季度学时进度', 'warn.ratio.q3', '0.5', '年度时间进度达75%时学时进度低于该值记橙色预警'),
 (7, '预警-年末学时进度', 'warn.ratio.end', '0.7', '年度时间进度达90%时学时进度低于该值记红色预警');
+
+-- 九、v1.5 行业对标优化菜单(学习地图/证书查验) -----------------------------
+INSERT INTO sys_menu (id, parent_id, menu_name, path, component, menu_type, perms, icon, order_num) VALUES
+(607, 100, '学习地图配置', 'learning-map', 'map/index',  'C', 'biz:map:list', 'Guide',   11),
+(608, 500, '我的学习地图', 'my-map',        'map/my',     'C', '',             'Compass', 6),
+(609, 500, '证书查验',     'cert-verify',   'cert/verify','C', '',             'Search',  7),
+(1340, 607, '学习地图维护', '', '', 'F', 'biz:map:edit', '', 1);
+
+INSERT INTO sys_role_menu (role_id, menu_id) VALUES
+(2, 607),(2, 608),(2, 609),(2, 1340),
+(3, 608),(3, 609);
+
+INSERT INTO sys_config (id, config_name, config_key, config_value, remark) VALUES
+(8,  '定时自动提醒开关',   'notify.enabled',          '1', '每日自动扫描开班提醒/评估催办/学时预警; 0 关闭'),
+(9,  '开班提醒提前天数',   'notify.class.remind.days','3', '班次开始前 N 天提醒未参训学员'),
+(10, '评估催办触发天数',   'notify.eval.remind.days', '3', '结班满 N 天仍未评估的学员自动催办');
+
+-- 十、结业证书示例(班次1已结业; 防伪码仅示例, 正式环境由发证时随机生成) ------------
+INSERT INTO biz_certificate (id, cert_no, user_id, class_id, hours, grade, verify_code, issue_date) VALUES
+(1, 'QGPX-2026-000001', 3, 1, 10.0, '合格', '315728', '2026-03-12'),
+(2, 'QGPX-2026-000002', 4, 1, 10.0, '合格', '842061', '2026-03-12'),
+(3, 'QGPX-2026-000003', 6, 1, 10.0, '合格', '597304', '2026-03-12');

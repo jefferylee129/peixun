@@ -308,6 +308,9 @@ public class ClassService {
         if (s.getStatus() == null) {
             s.setStatus("0");
         }
+        if (s.getSignCode() == null || s.getSignCode().isBlank()) {
+            s.setSignCode(newSignCode(s.getClassId(), null));
+        }
         scheduleMapper.insert(s);
     }
 
@@ -322,7 +325,122 @@ public class ClassService {
         assertClassEditable(old.getClassId());
         s.setId(sid);
         s.setStatus(null);
+        // 签到码不通过编辑接口变更, 只能走刷新接口, 防止编辑课节时被顺带改码
+        s.setSignCode(null);
         scheduleMapper.updateById(s);
+    }
+
+    // ---------- 自助签到码(对标行业"输码/扫码签到") ----------
+
+    private static final java.security.SecureRandom CODE_RNG = new java.security.SecureRandom();
+
+    /** 生成 6 位数字签到码, 保证同一班次各课节不重复 */
+    private String newSignCode(Long classId, Long excludeSid) {
+        for (int i = 0; i < 20; i++) {
+            String code = String.format("%06d", CODE_RNG.nextInt(1_000_000));
+            Long dup = scheduleMapper.selectCount(new LambdaQueryWrapper<ClassSchedule>()
+                    .eq(ClassSchedule::getClassId, classId)
+                    .eq(ClassSchedule::getSignCode, code)
+                    .ne(excludeSid != null, ClassSchedule::getId, excludeSid));
+            if (dup == null || dup == 0) {
+                return code;
+            }
+        }
+        throw new BusinessException("签到码生成失败, 请重试");
+    }
+
+    /** 刷新课节签到码(班次进行中且课节未结束/未取消) */
+    @Transactional
+    public String refreshSignCode(Long sid) {
+        ClassSchedule s = scheduleMapper.selectById(sid);
+        if (s == null) {
+            throw new BusinessException("课节不存在");
+        }
+        if (!"0".equals(s.getStatus())) {
+            throw new BusinessException("仅待上课的课节可刷新签到码");
+        }
+        assertClassEditable(s.getClassId());
+        String code = newSignCode(s.getClassId(), sid);
+        ClassSchedule u = new ClassSchedule();
+        u.setId(sid);
+        u.setSignCode(code);
+        scheduleMapper.updateById(u);
+        return code;
+    }
+
+    /**
+     * 员工自助签到: 仅限本班学员, 凭课节签到码签到。
+     * - 不自动入班(知道码不等于有名额), 不允许覆盖管理员登记的请假/缺勤;
+     * - 已结束课节不能自助签到(补签须管理员);
+     * - 签到类型按时间自动判定: 晚于上课时间记迟到(沿用迟到系数口径)。
+     */
+    @Transactional
+    public String selfSign(Long sid, String code) {
+        ClassSchedule s = scheduleMapper.selectById(sid);
+        if (s == null) {
+            throw new BusinessException("课节不存在");
+        }
+        if ("2".equals(s.getStatus())) {
+            throw new BusinessException("该课节已取消");
+        }
+        if ("1".equals(s.getStatus())) {
+            throw new BusinessException("该课节已结束, 如需补签请联系培训管理员");
+        }
+        TrainingClass c = classMapper.selectById(s.getClassId());
+        if (c == null || !"2".equals(c.getStatus())) {
+            throw new BusinessException("班次未在进行中, 不能签到");
+        }
+        // 只能在课节当天签到, 防止班次进行期间提前/事后跨日签到
+        if (s.getTeachDate() != null && !s.getTeachDate().equals(LocalDate.now())) {
+            throw new BusinessException("仅可在课节当日(" + s.getTeachDate() + ")签到");
+        }
+        Long userId = AuthContext.getUserId();
+        if (studentMapper.selectOne(s.getClassId(), userId) == null) {
+            throw new BusinessException("自助签到仅限本班学员");
+        }
+        if (s.getSignCode() == null || code == null || !s.getSignCode().equals(code.trim())) {
+            throw new BusinessException("签到码不正确");
+        }
+        Attendance exist = attendanceMapper.selectByScheduleAndUser(sid, userId);
+        if (exist != null) {
+            if ("normal".equals(exist.getSignType()) || "late".equals(exist.getSignType())) {
+                throw new BusinessException("您已签到, 无需重复签到");
+            }
+            // 请假/缺勤由管理员登记, 学员不能凭签到码自行改成出勤
+            throw new BusinessException("您的考勤已由管理员登记, 如有异议请联系培训管理员");
+        }
+        String type = s.getStartTime() != null
+                && java.time.LocalTime.now().isAfter(s.getStartTime()) ? "late" : "normal";
+        sign(sid, userId, type);
+        return type;
+    }
+
+    /**
+     * 员工自助签到(推荐入口): 在班次内按签到码定位课节。
+     * 先校验学员身份再看码, 避免非学员借码探测。
+     */
+    @Transactional
+    public String selfSignByClass(Long classId, String code) {
+        TrainingClass c = getOrThrow(classId);
+        Long userId = AuthContext.getUserId();
+        if (studentMapper.selectOne(classId, userId) == null) {
+            throw new BusinessException("自助签到仅限本班学员");
+        }
+        if (code == null || code.isBlank()) {
+            throw new BusinessException("请输入签到码");
+        }
+        String trimmed = code.trim();
+        ClassSchedule matched = null;
+        for (ClassSchedule s : scheduleMapper.selectByClassId(classId)) {
+            if (trimmed.equals(s.getSignCode()) && !"2".equals(s.getStatus())) {
+                matched = s;
+                break;
+            }
+        }
+        if (matched == null) {
+            throw new BusinessException("签到码不正确");
+        }
+        return selfSign(matched.getId(), trimmed);
     }
 
     public void deleteSchedule(Long sid) {

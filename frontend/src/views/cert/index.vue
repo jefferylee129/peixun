@@ -34,6 +34,11 @@
           </template>
         </el-table-column>
         <el-table-column prop="issueDate" label="发证日期" width="110" align="center" />
+        <el-table-column prop="verifyCode" label="防伪码" width="100" align="center">
+          <template #default="{ row }">
+            <span class="vcode">{{ row.verifyCode || '—' }}</span>
+          </template>
+        </el-table-column>
         <el-table-column label="操作" width="90" align="center">
           <template #default="{ row }">
             <el-button link type="primary" size="small" @click="show(row)">证书预览</el-button>
@@ -48,6 +53,7 @@
       <div class="cert-paper">
         <div class="cert-title">培 训 结 业 证 书</div>
         <div class="cert-no">{{ current.certNo }}</div>
+        <div v-if="current.verifyCode" class="cert-vcode">防伪码 {{ current.verifyCode }}(可在此系统「证书查验」核验真伪)</div>
         <div class="cert-body">
           <p><b>{{ current.userName }}</b> 同志(工号 {{ current.employeeNo }})</p>
           <p>
@@ -185,6 +191,18 @@ onMounted(() => load())
   color: #909399;
   font-size: 12px;
   margin-top: 6px;
+}
+
+.cert-vcode {
+  color: #909399;
+  font-size: 12px;
+  margin-top: 2px;
+}
+
+.vcode {
+  font-family: 'SFMono-Regular', Menlo, Consolas, monospace;
+  font-weight: 700;
+  letter-spacing: 2px;
 }
 
 .cert-body {

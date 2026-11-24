@@ -218,17 +218,16 @@ public class ArchiveService {
         return result;
     }
 
-    /** 学时达标预警(管理员看全员, 员工看自己); level: yellow橙黄/orange橙/red红 */
-    public List<Map<String, Object>> warnings(Integer year) {
+    /**
+     * 全员预警计算(不依赖登录上下文, 供定时任务与管理员推送复用)。
+     * 返回按 red → orange → yellow 排序的预警行。
+     */
+    public List<Map<String, Object>> allWarnings(Integer year) {
         int y = year == null ? LocalDate.now().getYear() : year;
-        boolean viewer = canViewAll();
         List<Map<String, Object>> rows = hoursService.userStats(y, null, null);
         double tp = timeProgress(y);
         List<Map<String, Object>> result = new ArrayList<>();
         for (Map<String, Object> row : rows) {
-            if (!viewer && !row.get("userId").equals(AuthContext.getUserId())) {
-                continue;
-            }
             String level = levelOf(row, tp);
             if (level == null) {
                 continue;
@@ -240,6 +239,20 @@ public class ArchiveService {
         }
         Map<String, Integer> severity = Map.of("red", 0, "orange", 1, "yellow", 2);
         result.sort(Comparator.comparing(m -> severity.getOrDefault(String.valueOf(m.get("level")), 9)));
+        return result;
+    }
+
+    /** 学时达标预警(管理员看全员, 员工看自己); level: yellow橙黄/orange橙/red红 */
+    public List<Map<String, Object>> warnings(Integer year) {
+        int y = year == null ? LocalDate.now().getYear() : year;
+        boolean viewer = canViewAll();
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (Map<String, Object> item : allWarnings(y)) {
+            if (!viewer && !item.get("userId").equals(AuthContext.getUserId())) {
+                continue;
+            }
+            result.add(item);
+        }
         return result;
     }
 
@@ -265,7 +278,7 @@ public class ArchiveService {
     public int pushWarnings(Integer year) {
         int y = year == null ? LocalDate.now().getYear() : year;
         int n = 0;
-        for (Map<String, Object> w : warnings(y)) {
+        for (Map<String, Object> w : allWarnings(y)) {
             String level = String.valueOf(w.get("level"));
             String levelText = switch (level) {
                 case "red" -> "红色(严重滞后)";

@@ -271,6 +271,7 @@ CREATE TABLE IF NOT EXISTS biz_class_schedule (
   end_time    TIME DEFAULT NULL,
   hours       DECIMAL(6, 1) NOT NULL DEFAULT 0 COMMENT '本节学时',
   location    VARCHAR(200) DEFAULT NULL,
+  sign_code   VARCHAR(8) DEFAULT NULL COMMENT '自助签到码(6位)',
   status      VARCHAR(4) NOT NULL DEFAULT '0' COMMENT '0待上课 1已完成 2已取消',
   remark      VARCHAR(500) DEFAULT NULL,
   del_flag    TINYINT NOT NULL DEFAULT 0,
@@ -373,6 +374,7 @@ CREATE TABLE IF NOT EXISTS biz_certificate (
   class_id    BIGINT NOT NULL,
   hours       DECIMAL(6, 1) DEFAULT 0 COMMENT '结业学时',
   grade       VARCHAR(20) DEFAULT '合格' COMMENT '合格/优秀',
+  verify_code VARCHAR(8) DEFAULT NULL COMMENT '防伪码(6位), 公开查验双要素',
   issue_date  DATE DEFAULT NULL,
   create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
   update_time DATETIME DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
@@ -430,3 +432,28 @@ CREATE TABLE IF NOT EXISTS biz_exam_record (
   del_flag    TINYINT NOT NULL DEFAULT 0,
   UNIQUE KEY uk_er_exam_user (exam_id, user_id)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '考试作答';
+
+-- =====================================================================
+-- v1.5 行业对标优化: 岗位学习地图 / 自动提醒留痕
+-- =====================================================================
+CREATE TABLE IF NOT EXISTS biz_learning_map (
+  id          BIGINT AUTO_INCREMENT PRIMARY KEY,
+  year        INT NOT NULL COMMENT '年度',
+  user_type   VARCHAR(20) NOT NULL COMMENT 'manager/professional/staff',
+  course_id   BIGINT NOT NULL COMMENT '必修课程',
+  del_flag    TINYINT NOT NULL DEFAULT 0,
+  create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+  update_time DATETIME DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_map (year, user_type, course_id),
+  KEY idx_map_course (course_id)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '岗位学习地图(年度必修课)';
+
+CREATE TABLE IF NOT EXISTS biz_notify_log (
+  id          BIGINT AUTO_INCREMENT PRIMARY KEY,
+  notify_type VARCHAR(30) NOT NULL COMMENT 'classStart/evalPending/hourWarn',
+  biz_key     VARCHAR(120) NOT NULL COMMENT '去重键, 如 class:12:user:3',
+  user_id     BIGINT NOT NULL,
+  sent_time   DATETIME NOT NULL,
+  KEY idx_notify_key (notify_type, biz_key),
+  KEY idx_notify_time (sent_time)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '自动提醒发送留痕';

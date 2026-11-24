@@ -21,5 +21,7 @@ public class Certificate extends BaseEntity {
     private Long classId;
     private BigDecimal hours;
     private String grade;
+    /** 防伪码(6位): 公开查验需 证书编号+防伪码 双要素 */
+    private String verifyCode;
     private LocalDate issueDate;
 }

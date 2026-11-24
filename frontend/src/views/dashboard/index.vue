@@ -15,6 +15,26 @@
       </el-card>
     </div>
 
+    <!-- 岗位必修课(全员可见) -->
+    <el-card shadow="never" class="map-card">
+      <div class="map-body">
+        <div class="map-left">
+          <div class="map-title">岗位必修课({{ mapYear }}年)</div>
+          <div class="map-sub">
+            <template v-if="myMapData.configured === false">本年度学习地图尚未配置</template>
+            <template v-else>已完成 {{ myMapData.done ?? 0 }} / {{ myMapData.total ?? 0 }} 门</template>
+          </div>
+        </div>
+        <el-progress
+          class="map-progress"
+          :percentage="Number(myMapData.percent) || 0"
+          :stroke-width="14"
+          :color="(myMapData.percent || 0) >= 100 ? '#67c23a' : '#e6a23c'"
+        />
+        <el-button size="small" @click="$router.push('/my-map')">查看学习地图</el-button>
+      </div>
+    </el-card>
+
     <!-- 学时预警(个人) -->
     <el-alert
       v-if="myWarn"
@@ -123,7 +143,7 @@ import { useUserStore } from '@/store/user'
 import { statsOverview, statsMonthHours, statsDeptHours, statsCourseCategory } from '@/api/train'
 import { myHourSummary } from '@/api/train'
 import { pageClass } from '@/api/train'
-import { myWarning, warnings as warningsApi, pushWarnings } from '@/api/optimize'
+import { myWarning, warnings as warningsApi, pushWarnings, myMap } from '@/api/optimize'
 import { NEED_TYPE, CLASS_STATUS } from '@/utils/constants'
 
 const store = useUserStore()
@@ -133,6 +153,8 @@ const overview = ref({})
 const mySummary = ref({})
 const recentClasses = ref([])
 const myWarn = ref(null)
+const myMapData = ref({})
+const mapYear = new Date().getFullYear()
 const warnRows = ref([])
 const pushing = ref(false)
 const WARN_LEVEL = { yellow: '黄色预警', orange: '橙色预警', red: '红色预警' }
@@ -227,6 +249,13 @@ onMounted(async () => {
     const res = await pageClass({ page: 1, size: 5 })
     recentClasses.value = res.data.records
   }
+  // 岗位必修课(全员)
+  try {
+    const res = await myMap({ year: mapYear })
+    myMapData.value = res.data || {}
+  } catch (e) {
+    myMapData.value = {}
+  }
   // 预警看板: 个人预警 + 管理员全员预警
   try {
     const res = await myWarning({ year })
@@ -258,6 +287,32 @@ async function pushWarn() {
 </script>
 
 <style scoped>
+.map-card {
+  margin-bottom: 12px;
+}
+
+.map-body {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+
+.map-title {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.map-sub {
+  color: #909399;
+  font-size: 13px;
+  margin-top: 4px;
+}
+
+.map-progress {
+  flex: 1;
+  max-width: 420px;
+}
+
 .warn-alert {
   margin-bottom: 12px;
 }

@@ -24,6 +24,14 @@ public interface HourRecordMapper extends BaseMapper<HourRecord> {
             "WHERE del_flag = 0 AND status = '1' AND user_id = #{userId} AND year = #{year} GROUP BY source")
     List<Map<String, Object>> sumBySource(@Param("userId") Long userId, @Param("year") Integer year);
 
+    /** 某人已完成(已认定学时>0)的课程ID集合, 全年度口径; 用于学习地图必修完成判定 */
+    @Select("<script>" +
+            "SELECT DISTINCT course_id FROM biz_hour_record " +
+            "WHERE del_flag = 0 AND status = '1' AND hours &gt; 0 AND user_id = #{userId} " +
+            "AND course_id IN <foreach collection='courseIds' item='c' open='(' separator=',' close=')'>#{c}</foreach>" +
+            "</script>")
+    List<Long> learnedCourseIds(@Param("userId") Long userId, @Param("courseIds") List<Long> courseIds);
+
     /**
      * 物理删除签到自动生成的学时(可由签到记录重建的派生数据)。
      * 不能走 @TableLogic 软删: uk_hour_schedule_user 唯一键会与软删行冲突,

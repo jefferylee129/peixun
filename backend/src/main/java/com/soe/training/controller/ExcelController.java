@@ -52,6 +52,75 @@ public class ExcelController {
     private final UserMapper userMapper;
     private final RoleMapper roleMapper;
     private final com.fasterxml.jackson.databind.ObjectMapper objectMapper;
+    private final ArchiveService archiveService;
+
+    /**
+     * 一人一档导出(巡察/干部任免纸质归档用): 基本信息、年度学时、参训班次、证书与考试。
+     * 权限: 导出本人, 或具备查他人档案权限。
+     */
+    @OperLog(module = "培训档案", operation = "导出一人一档")
+    @GetMapping("/archive")
+    public void exportArchive(@RequestParam Long userId,
+                              @RequestParam(required = false) Integer year,
+                              HttpServletResponse response) throws IOException {
+        LoginUser ctx = AuthContext.get();
+        if (ctx == null || (!ctx.getUserId().equals(userId) && !ctx.hasPerm("biz:archive:other"))) {
+            throw new com.soe.training.common.BusinessException(403, "仅可导出本人培训档案");
+        }
+        Map<String, Object> a = archiveService.archive(userId, year);
+        int exportYear = year == null ? java.time.LocalDate.now().getYear() : year;
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> user = (Map<String, Object>) a.get("user");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> hours = (Map<String, Object>) a.get("hours");
+        List<List<Object>> base = new ArrayList<>();
+        base.add(row("姓名", user.get("nickname")));
+        base.add(row("工号", user.get("employeeNo")));
+        base.add(row("部门", user.get("deptName")));
+        base.add(row("人员类型", cn(USER_TYPE_CN, user.get("userType") == null ? null : String.valueOf(user.get("userType")))));
+        base.add(row("岗位", user.get("position")));
+        base.add(row("统计年度", exportYear));
+        base.add(row("年度已认定学时", hours.get("total")));
+        base.add(row("年度学时要求", hours.get("required")));
+        base.add(row("达标情况", Boolean.TRUE.equals(hours.get("reached")) ? "已达标" : "未达标"));
+
+        List<List<Object>> classRows = new ArrayList<>();
+        for (Map<String, Object> c : castList(a.get("classes"))) {
+            classRows.add(List.of(nvl(c.get("className")), nvl(c.get("startDate")), nvl(c.get("endDate")),
+                    nvl(c.get("totalHours")), cn(STUDENT_STATUS_CN, c.get("studentStatus") == null ? null : String.valueOf(c.get("studentStatus")))));
+        }
+        List<List<Object>> certRows = new ArrayList<>();
+        for (Map<String, Object> c : castList(a.get("certificates"))) {
+            certRows.add(List.of(nvl(c.get("certNo")), nvl(c.get("className")), nvl(c.get("hours")),
+                    nvl(c.get("grade")), nvl(c.get("issueDate"))));
+        }
+        List<List<Object>> examRows = new ArrayList<>();
+        for (Map<String, Object> e : castList(a.get("exams"))) {
+            examRows.add(List.of(nvl(e.get("title")), nvl(e.get("score")),
+                    Integer.valueOf(1).equals(e.get("passed")) ? "及格" : "不及格", nvl(e.get("submitTime"))));
+        }
+        ExcelExportUtil.writeMulti(response, "培训档案-" + nvl(user.get("nickname")) + "-" + exportYear, List.of(
+                new ExcelExportUtil.SheetSpec("基本信息", List.of("项目", "内容"), base),
+                new ExcelExportUtil.SheetSpec("参训班次",
+                        List.of("班次", "开始日期", "结束日期", "认定学时", "参训状态"), classRows),
+                new ExcelExportUtil.SheetSpec("结业证书",
+                        List.of("证书编号", "班次", "学时", "结论", "发证日期"), certRows),
+                new ExcelExportUtil.SheetSpec("考试成绩",
+                        List.of("考试", "成绩", "结论", "交卷时间"), examRows)));
+    }
+
+    private List<Object> row(String k, Object v) {
+        List<Object> r = new ArrayList<>();
+        r.add(k);
+        r.add(v == null ? "" : v);
+        return r;
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<Map<String, Object>> castList(Object o) {
+        return o instanceof List ? (List<Map<String, Object>>) o : List.of();
+    }
 
     private static final Map<String, String> NEED_TYPE_CN = Map.of(
             "party", "党性教育", "mgmt", "管理能力", "skill", "岗位技能", "safety", "安全合规", "general", "通用素质");

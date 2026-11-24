@@ -60,6 +60,49 @@
       </el-card>
     </div>
 
+    <!-- 培训经费预算执行 -->
+    <el-card shadow="never" class="budget-card">
+      <template #header>
+        <div class="table-header">
+          <span>培训经费预算执行({{ year }}年 · 万元)</span>
+          <el-tooltip content="计划预算 = 当年已批准培训计划预算合计; 班次经费 = 当年开班且未取消的班次经费合计(按开班日期归年)。执行率 = 班次经费 / 计划预算" placement="bottom">
+            <el-icon class="hint"><QuestionFilled /></el-icon>
+          </el-tooltip>
+        </div>
+      </template>
+      <div class="budget-figures">
+        <div class="fig">
+          <div class="fig-value">{{ budget.planBudget ?? '-' }}</div>
+          <div class="fig-label">计划预算</div>
+        </div>
+        <div class="fig">
+          <div class="fig-value">{{ budget.classBudget ?? '-' }}</div>
+          <div class="fig-label">班次经费</div>
+        </div>
+        <div class="fig">
+          <div class="fig-value" :class="{ over: isOver }">{{ budget.usageRate == null ? (isOver ? '超预算' : '—') : budget.usageRate + '%' }}</div>
+          <div class="fig-label">预算执行率</div>
+        </div>
+        <div class="fig">
+          <div class="fig-value">{{ budget.unplannedBudget ?? 0 }}</div>
+          <div class="fig-label">计划外班次经费</div>
+        </div>
+      </div>
+      <div ref="budgetRef" class="chart-box"></div>
+      <el-table :data="budget.byPlan || []" border size="small" max-height="260" class="plan-table">
+        <el-table-column prop="planName" label="培训计划" min-width="200" show-overflow-tooltip />
+        <el-table-column prop="classCount" label="班次数" width="80" align="center" />
+        <el-table-column prop="planBudget" label="计划预算" width="100" align="center" />
+        <el-table-column prop="classBudget" label="班次经费" width="100" align="center" />
+        <el-table-column label="执行率" width="110" align="center">
+          <template #default="{ row }">
+            <el-tag v-if="row.over" type="danger" size="small">超预算</el-tag>
+            <span v-else>{{ row.usageRate == null ? '—' : row.usageRate + '%' }}</span>
+          </template>
+        </el-table-column>
+      </el-table>
+    </el-card>
+
     <!-- 员工学时达标 -->
     <el-card shadow="never">
       <template #header>
@@ -108,25 +151,29 @@
 <script setup>
 import { computed, onMounted, onUnmounted, ref, nextTick } from 'vue'
 import * as echarts from 'echarts'
-import { Refresh, Download } from '@element-plus/icons-vue'
+import { Refresh, Download, QuestionFilled } from '@element-plus/icons-vue'
 import {
   statsOverview, statsMonthHours, statsDeptHours, statsClassStatus,
   statsPlanStatus, statsNeedType, statsCourseCategory, hourUserStats
 } from '@/api/train'
 import { NEED_TYPE, CLASS_STATUS, PLAN_STATUS, USER_TYPE, yearOptions } from '@/utils/constants'
 import { exportCsv } from '@/utils/export'
+import { statsBudget } from '@/api/optimize'
 
 const year = ref(new Date().getFullYear())
 const keyword = ref('')
 const overview = ref({})
 const userRows = ref([])
 const userLoading = ref(false)
+const isOver = computed(() => Number(budget.value.classBudget || 0) > Number(budget.value.planBudget || 0))
 
 const monthRef = ref()
 const deptRef = ref()
 const classRef = ref()
 const planRef = ref()
 const needRef = ref()
+const budgetRef = ref()
+const budget = ref({})
 const courseRef = ref()
 const charts = {}
 
@@ -208,6 +255,27 @@ async function loadAll() {
   if (co) co.setOption(pieOption(course.data, NEED_TYPE))
 
   loadUserStats()
+  loadBudget()
+}
+
+async function loadBudget() {
+  const res = await statsBudget({ year: year.value })
+  budget.value = res.data || {}
+  await nextTick()
+  const b = initChart('budget', budgetRef)
+  if (!b) return
+  const rows = budget.value.byDept || []
+  b.setOption({
+    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+    legend: { bottom: 0 },
+    grid: { left: 44, right: 16, top: 24, bottom: 44 },
+    xAxis: { type: 'category', data: rows.map(r => r.deptName), axisLabel: { rotate: 20 } },
+    yAxis: { type: 'value', name: '万元' },
+    series: [
+      { name: '计划预算', type: 'bar', barMaxWidth: 30, data: rows.map(r => Number(r.planBudget)), itemStyle: { color: '#1677ff' } },
+      { name: '班次经费', type: 'bar', barMaxWidth: 30, data: rows.map(r => Number(r.classBudget)), itemStyle: { color: '#fa8c16' } }
+    ]
+  })
 }
 
 async function loadUserStats() {
@@ -251,6 +319,44 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+.budget-card {
+  margin-bottom: 12px;
+}
+
+.hint {
+  color: #909399;
+  cursor: help;
+  vertical-align: -2px;
+}
+
+.budget-figures {
+  display: flex;
+  justify-content: space-around;
+  margin-bottom: 8px;
+}
+
+.fig {
+  text-align: center;
+}
+
+.fig-value {
+  font-size: 24px;
+  font-weight: 700;
+}
+
+.fig-value.over {
+  color: #f56c6c;
+}
+
+.fig-label {
+  color: #909399;
+  font-size: 12px;
+}
+
+.plan-table {
+  margin-top: 8px;
+}
+
 .table-header {
   display: flex;
   justify-content: space-between;

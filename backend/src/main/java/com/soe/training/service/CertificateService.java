@@ -39,6 +39,8 @@ public class CertificateService {
     private final UserMapper userMapper;
     private final MessageService messageService;
 
+    private static final java.security.SecureRandom CODE_RNG = new java.security.SecureRandom();
+
     @Transactional
     public int issueForClass(Long classId) {
         TrainingClass c = classMapper.selectById(classId);
@@ -66,6 +68,7 @@ public class CertificateService {
             cert.setHours(st.getTotalHours() == null ? BigDecimal.ZERO : st.getTotalHours());
             cert.setGrade("合格");
             cert.setIssueDate(LocalDate.now());
+            cert.setVerifyCode(String.format("%06d", CODE_RNG.nextInt(1_000_000)));
             certificateMapper.insert(cert);
             Certificate u = new Certificate();
             u.setId(cert.getId());
@@ -130,6 +133,7 @@ public class CertificateService {
         row.put("classId", c.getClassId());
         row.put("hours", c.getHours());
         row.put("grade", c.getGrade());
+        row.put("verifyCode", c.getVerifyCode());
         row.put("issueDate", c.getIssueDate());
         row.put("createTime", c.getCreateTime());
         SysUser u = userMapper.selectById(c.getUserId());

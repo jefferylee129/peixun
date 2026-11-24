@@ -18,6 +18,7 @@ import java.util.Map;
 public class StatsController {
 
     private final StatsService statsService;
+    private final com.soe.training.service.BudgetStatsService budgetStatsService;
 
     @RequirePerm("biz:stats:view")
     @GetMapping("/overview")
@@ -67,5 +68,12 @@ public class StatsController {
                                                  @RequestParam(required = false) Long deptId,
                                                  @RequestParam(required = false) String keyword) {
         return Result.ok(statsService.userStatsSafe(year, deptId, keyword));
+    }
+
+    /** 培训经费预算执行(计划预算 vs 班次经费, 按部门/计划拆分) */
+    @RequirePerm("biz:stats:view")
+    @GetMapping("/budget")
+    public Result<Map<String, Object>> budget(@RequestParam(required = false) Integer year) {
+        return Result.ok(budgetStatsService.stats(year));
     }
 }

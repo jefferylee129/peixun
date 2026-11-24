@@ -20,7 +20,8 @@ public class WebMvcConfig implements WebMvcConfigurer {
     public void addInterceptors(InterceptorRegistry registry) {
         registry.addInterceptor(authInterceptor)
                 .addPathPatterns("/**")
-                .excludePathPatterns("/auth/login", "/error");
+                // 公开放行范围务必收窄到具体只读接口, 不要放行整个前缀
+                .excludePathPatterns("/auth/login", "/error", "/public/certificates/verify");
     }
 
     @Override

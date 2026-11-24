@@ -62,9 +62,10 @@ public class ClassController {
     @OperLog(module = "培训班次", operation = "新增班次")
     @RequirePerm("biz:class:add")
     @PostMapping
-    public Result<Void> add(@RequestBody TrainingClass trainingClass) {
+    public Result<Long> add(@RequestBody TrainingClass trainingClass) {
         classService.save(trainingClass);
-        return Result.ok();
+        // 返回新建班次ID, 便于前端创建后直接跳转/排课(无需再按名称反查)
+        return Result.ok(trainingClass.getId());
     }
 
     @OperLog(module = "培训班次", operation = "修改班次")
@@ -164,6 +165,35 @@ public class ClassController {
     public Result<Void> finishSchedule(@PathVariable Long sid) {
         classService.finishSchedule(sid);
         return Result.ok();
+    }
+
+    /** 刷新课节自助签到码 */
+    @OperLog(module = "培训班次", operation = "刷新签到码")
+    @RequirePerm("biz:class:sign")
+    @PutMapping("/schedules/{sid}/refresh-code")
+    public Result<String> refreshSignCode(@PathVariable Long sid) {
+        return Result.ok(classService.refreshSignCode(sid));
+    }
+
+    /** 员工自助签到: 凭课节签到码, 仅限本班学员(仅需登录) */
+    @OperLog(module = "培训班次", operation = "学员自助签到")
+    @PutMapping("/schedules/{sid}/self-sign")
+    public Result<String> selfSign(@PathVariable Long sid, @RequestBody java.util.Map<String, String> body) {
+        String code = body == null ? null : body.get("code");
+        String signType = classService.selfSign(sid, code);
+        return Result.ok("签到成功(" + ("late".equals(signType) ? "迟到" : "正常") + ")", signType);
+    }
+
+    /**
+     * 员工自助签到(推荐入口): 只需选择班次并输入签到码, 由后端在班次内按码定位课节。
+     * 员工端没有课节列表权限, 不应要求其先选课节。
+     */
+    @OperLog(module = "培训班次", operation = "学员自助签到")
+    @PutMapping("/{id}/self-sign")
+    public Result<String> selfSignByClass(@PathVariable Long id, @RequestBody java.util.Map<String, String> body) {
+        String code = body == null ? null : body.get("code");
+        String signType = classService.selfSignByClass(id, code);
+        return Result.ok("签到成功(" + ("late".equals(signType) ? "迟到" : "正常") + ")", signType);
     }
 
     @RequirePerm("biz:class:list")

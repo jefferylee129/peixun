@@ -89,6 +89,22 @@
                 </el-tag>
               </template>
             </el-table-column>
+            <el-table-column v-if="store.hasPerm('biz:class:sign')" label="自助签到码" width="170" align="center">
+              <template #default="{ row }">
+                <template v-if="row.signCode">
+                  <span class="sign-code">{{ row.signCode }}</span>
+                  <el-button
+                    v-if="row.status === '0'"
+                    v-perm="'biz:class:sign'"
+                    link
+                    type="primary"
+                    size="small"
+                    @click="doRefreshCode(row)"
+                  >刷新</el-button>
+                </template>
+                <span v-else class="no-code">—</span>
+              </template>
+            </el-table-column>
             <el-table-column label="操作" width="200" align="center" fixed="right">
               <template #default="{ row }">
                 <el-button
@@ -305,6 +321,7 @@ import { useUserStore } from '@/store/user'
 import {
   classDetail, changeClassStatus, addClassStudents, removeClassStudent,
   classSchedules, addSchedule, updateSchedule, deleteSchedule, finishSchedule,
+  refreshSignCode,
   scheduleAttendance, signAttendance, classStudents, evalSummary, pageEvalTemplate
 } from '@/api/train'
 import { publishedCourses, allTrainers } from '@/api/biz'
@@ -458,6 +475,16 @@ function removeSchedule(row) {
     .catch(() => {})
 }
 
+function doRefreshCode(row) {
+  ElMessageBox.confirm('刷新后原签到码立即失效, 学员需使用新码签到。确定刷新?', '刷新签到码', { type: 'warning' })
+    .then(async () => {
+      const res = await refreshSignCode(row.id)
+      ElMessage.success(`新签到码: ${res.data}`)
+      loadAll()
+    })
+    .catch(() => {})
+}
+
 function doFinishSchedule(row) {
   ElMessageBox.confirm(
     `确认结束课节「${row.teachDate} ${row.courseName || ''}」?系统将按签到与规则(迟到按系数折算)自动生成学时台账。`,
@@ -546,6 +573,19 @@ function exportSchedules() {
 </script>
 
 <style scoped>
+.sign-code {
+  font-family: 'SFMono-Regular', Menlo, Consolas, monospace;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: 3px;
+  color: #1677ff;
+  margin-right: 6px;
+}
+
+.no-code {
+  color: #c0c4cc;
+}
+
 .detail-header {
   display: flex;
   justify-content: space-between;

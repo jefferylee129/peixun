@@ -28,6 +28,8 @@ public class ClassSchedule extends BaseEntity {
     /** 本节学时 */
     private BigDecimal hours;
     private String location;
+    /** 自助签到码(6位), 排课时生成, 管理员可刷新 */
+    private String signCode;
     private String status;
     private String remark;
 }

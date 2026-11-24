@@ -90,4 +90,22 @@ public interface StatsMapper {
     List<Map<String, Object>> userYearHours(@Param("year") Integer year,
                                             @Param("deptId") Long deptId,
                                             @Param("keyword") String keyword);
+
+    /** 年度已批准计划预算合计(万元), 按主办部门 */
+    @Select("SELECT IFNULL(dept_id, 0) AS deptId, IFNULL(SUM(budget), 0) AS amount, COUNT(*) AS cnt " +
+            "FROM biz_plan WHERE del_flag = 0 AND status = '2' AND year = #{year} GROUP BY dept_id")
+    List<Map<String, Object>> planBudgetByDept(@Param("year") Integer year);
+
+    /**
+     * 年度班次经费合计(万元), 按主办部门; 取消的班次不计。
+     * 班次无独立年份列, 按开班日期归年。
+     */
+    @Select("SELECT IFNULL(dept_id, 0) AS deptId, IFNULL(SUM(budget), 0) AS amount, COUNT(*) AS cnt " +
+            "FROM biz_class WHERE del_flag = 0 AND status <> '4' AND YEAR(start_date) = #{year} GROUP BY dept_id")
+    List<Map<String, Object>> classBudgetByDept(@Param("year") Integer year);
+
+    /** 年度班次经费合计(万元), 按关联计划; plan_id 为空的归入计划外(deptId 列复用为 0) */
+    @Select("SELECT IFNULL(plan_id, 0) AS planId, IFNULL(SUM(budget), 0) AS amount, COUNT(*) AS cnt " +
+            "FROM biz_class WHERE del_flag = 0 AND status <> '4' AND YEAR(start_date) = #{year} GROUP BY plan_id")
+    List<Map<String, Object>> classBudgetByPlan(@Param("year") Integer year);
 }
