@@ -62,7 +62,8 @@
 │       ├── layout/             # 侧边栏+顶栏布局
 │       ├── views/              # 各业务页面
 │       ├── router/ store/ directives/ utils/
-├── docs/设计方案.md            # 行业对标与详细设计说明
+├── docs/需求文档.md            # 需求规格说明书(FR 编号/规则/验收/追溯)
+│   docs/设计方案.md            # 行业对标与详细设计说明
 │   docs/更新日志.md            # 版本演进与功能更新明细
 │   docs/测试报告.md            # 各轮测试结论
 └── docker-compose.yml          # 一键 MySQL(自动执行初始化脚本)
